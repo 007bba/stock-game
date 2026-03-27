@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+*.local
+
+# Logs
+*.log
+
+# System
+.DS_Store
+Thumbs.db

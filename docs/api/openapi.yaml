@@ -1,0 +1,611 @@
+openapi: 3.1.0
+info:
+  title: Stock Game MVP API
+  version: 0.1.0
+  description: >-
+    Internal training A-share simulation game API.
+    Matching is server-authoritative with 5-minute batch matching and auction windows.
+servers:
+  - url: https://api.stock-game.internal
+
+tags:
+  - name: Auth
+  - name: Seasons
+  - name: Market
+  - name: Orders
+  - name: Portfolio
+  - name: Leaderboard
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/auth/guest-login:
+    post:
+      tags: [Auth]
+      summary: Guest login for internal training environment
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [loginName, displayName]
+              properties:
+                loginName:
+                  type: string
+                  maxLength: 64
+                displayName:
+                  type: string
+                  maxLength: 64
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /v1/seasons/current:
+    get:
+      tags: [Seasons]
+      summary: Get current running/scheduled season
+      responses:
+        '200':
+          description: Current season
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Season'
+
+  /v1/seasons/{seasonId}/clock:
+    get:
+      tags: [Seasons]
+      summary: Get current game clock and phase
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+      responses:
+        '200':
+          description: Clock snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClockSnapshot'
+
+  /v1/seasons/{seasonId}/market/universe:
+    get:
+      tags: [Market]
+      summary: Get season stock universe
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+      responses:
+        '200':
+          description: Universe list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UniverseItem'
+
+  /v1/seasons/{seasonId}/market/quotes/latest:
+    get:
+      tags: [Market]
+      summary: Get latest quote snapshot for season universe
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+      responses:
+        '200':
+          description: Latest quotes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tickId, quotes]
+                properties:
+                  tickId:
+                    type: integer
+                    format: int64
+                  quotes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QuoteSnapshot'
+
+  /v1/seasons/{seasonId}/orders:
+    post:
+      tags: [Orders]
+      summary: Place a limit order
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaceOrderRequest'
+      responses:
+        '201':
+          description: Order accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags: [Orders]
+      summary: Query my orders
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
+        - in: query
+          name: tsCode
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+
+  /v1/seasons/{seasonId}/orders/{orderId}/cancel:
+    post:
+      tags: [Orders]
+      summary: Cancel an active order
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Canceled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Cancel rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/seasons/{seasonId}/portfolio:
+    get:
+      tags: [Portfolio]
+      summary: Get account and positions snapshot
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+      responses:
+        '200':
+          description: Portfolio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioResponse'
+
+  /v1/seasons/{seasonId}/ledger:
+    get:
+      tags: [Portfolio]
+      summary: Get cash ledger records
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LedgerEntry'
+
+  /v1/seasons/{seasonId}/leaderboard:
+    get:
+      tags: [Leaderboard]
+      summary: Get season leaderboard
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        '200':
+          description: Leaderboard list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardItem'
+
+  /v1/seasons/{seasonId}/ws-token:
+    post:
+      tags: [Seasons]
+      summary: Issue short-lived token for websocket subscription
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiresAt]
+                properties:
+                  token:
+                    type: string
+                  expiresAt:
+                    type: string
+                    format: date-time
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    SeasonId:
+      in: path
+      name: seasonId
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+  schemas:
+    AuthResponse:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      required: [id, loginName, displayName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        loginName:
+          type: string
+        displayName:
+          type: string
+
+    Season:
+      type: object
+      required: [id, seasonCode, seasonName, status, totalGameDays]
+      properties:
+        id:
+          type: integer
+          format: int64
+        seasonCode:
+          type: string
+        seasonName:
+          type: string
+        status:
+          type: string
+          enum: [draft, scheduled, running, ended, archived]
+        totalGameDays:
+          type: integer
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+
+    ClockSnapshot:
+      type: object
+      required: [seasonId, gameDayNo, minuteOfDay, phase, matchingMode, tickId]
+      properties:
+        seasonId:
+          type: integer
+          format: int64
+        gameDayNo:
+          type: integer
+        minuteOfDay:
+          type: integer
+        phase:
+          $ref: '#/components/schemas/SessionPhase'
+        matchingMode:
+          type: string
+          enum: [accept_only, batch_match, open_call_auction, close_call_auction, frozen]
+        tickId:
+          type: integer
+          format: int64
+        serverTime:
+          type: string
+          format: date-time
+
+    UniverseItem:
+      type: object
+      required: [tsCode, role, eventTag, rankInTheme]
+      properties:
+        tsCode:
+          type: string
+        role:
+          type: string
+          enum: [leader, follower, trend]
+        eventTag:
+          type: string
+        rankInTheme:
+          type: integer
+        labels:
+          type: array
+          items:
+            type: string
+
+    QuoteSnapshot:
+      type: object
+      required: [tsCode, refPrice, upperLimitPrice, lowerLimitPrice, isHalted]
+      properties:
+        tsCode:
+          type: string
+        refPrice:
+          type: number
+        vwapPrice:
+          type: number
+        upperLimitPrice:
+          type: number
+        lowerLimitPrice:
+          type: number
+        isHalted:
+          type: boolean
+        auctionImbalanceRatio:
+          type: number
+        tipAvailable:
+          type: boolean
+
+    PlaceOrderRequest:
+      type: object
+      required: [clientOrderId, tsCode, side, limitPrice, quantity]
+      properties:
+        clientOrderId:
+          type: string
+          maxLength: 64
+        tsCode:
+          type: string
+        side:
+          $ref: '#/components/schemas/OrderSide'
+        limitPrice:
+          type: number
+          minimum: 0.001
+        quantity:
+          type: integer
+          minimum: 100
+          description: Must be multiples of 100
+
+    Order:
+      type: object
+      required:
+        [id, clientOrderId, tsCode, side, limitPrice, quantity, remainingQty, status, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        clientOrderId:
+          type: string
+        tsCode:
+          type: string
+        side:
+          $ref: '#/components/schemas/OrderSide'
+        limitPrice:
+          type: number
+        quantity:
+          type: integer
+        remainingQty:
+          type: integer
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        rejectCode:
+          $ref: '#/components/schemas/RejectCode'
+        rejectReason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PortfolioResponse:
+      type: object
+      required: [account, positions]
+      properties:
+        account:
+          type: object
+          required: [availableCash, frozenCash, realizedPnl, totalAsset]
+          properties:
+            availableCash:
+              type: number
+            frozenCash:
+              type: number
+            realizedPnl:
+              type: number
+            totalAsset:
+              type: number
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Position'
+
+    Position:
+      type: object
+      required: [tsCode, qtyTotal, qtySellable, avgCost]
+      properties:
+        tsCode:
+          type: string
+        qtyTotal:
+          type: integer
+        qtySellable:
+          type: integer
+        avgCost:
+          type: number
+        marketValue:
+          type: number
+        unrealizedPnl:
+          type: number
+
+    LedgerEntry:
+      type: object
+      required: [id, entryType, amount, balanceAfter, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        entryType:
+          type: string
+          enum: [freeze, unfreeze, trade_buy, trade_sell, fee, tax, settlement, manual_adjustment]
+        amount:
+          type: number
+        balanceAfter:
+          type: number
+        refOrderId:
+          type: integer
+          format: int64
+        refTradeId:
+          type: integer
+          format: int64
+        note:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    LeaderboardItem:
+      type: object
+      required: [rankNo, userId, displayName, score, cumulativeReturnPct, maxDrawdownPct]
+      properties:
+        rankNo:
+          type: integer
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        score:
+          type: number
+        cumulativeReturnPct:
+          type: number
+        maxDrawdownPct:
+          type: number
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          $ref: '#/components/schemas/RejectCode'
+        message:
+          type: string
+        traceId:
+          type: string
+
+    OrderSide:
+      type: string
+      enum: [buy, sell]
+
+    OrderStatus:
+      type: string
+      enum: [pending, active, partially_filled, filled, canceled, rejected, expired]
+
+    SessionPhase:
+      type: string
+      enum: [open_auction, am_continuous, lunch_break, pm_continuous, close_auction]
+
+    RejectCode:
+      type: string
+      enum:
+        - LOT_SIZE_INVALID
+        - LIMIT_PRICE_OUT_OF_BAND
+        - SELL_T1_BLOCKED
+        - INSUFFICIENT_SELLABLE_QTY
+        - STOCK_HALTED
+        - SEASON_NOT_TRADING
+        - AUCTION_WINDOW_CLOSED
+        - INSUFFICIENT_CASH
+        - ORDER_NOT_FOUND
+        - ORDER_NOT_CANCELABLE
+
+x-websocket:
+  endpoint: wss://api.stock-game.internal/v1/ws?seasonId={seasonId}&token={token}
+  envelope:
+    type: object
+    required: [event, sequence, serverTime, payload]
+    properties:
+      event:
+        type: string
+      sequence:
+        type: integer
+        format: int64
+      serverTime:
+        type: string
+        format: date-time
+      payload:
+        type: object
+  events:
+    - name: clock.tick
+      payloadSchema:
+        $ref: '#/components/schemas/ClockSnapshot'
+    - name: market.quote.updated
+      payloadSchema:
+        $ref: '#/components/schemas/QuoteSnapshot'
+    - name: order.updated
+      payloadSchema:
+        $ref: '#/components/schemas/Order'
+    - name: trade.matched
+      payloadSchema:
+        type: object
+        properties:
+          tradeId:
+            type: integer
+            format: int64
+          tsCode:
+            type: string
+          tradePrice:
+            type: number
+          quantity:
+            type: integer
+          tickId:
+            type: integer
+            format: int64
+    - name: leaderboard.updated
+      payloadSchema:
+        type: array
+        items:
+          $ref: '#/components/schemas/LeaderboardItem'
