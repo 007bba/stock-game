@@ -1,0 +1,20 @@
+{
+  "exchange": "TST",
+  "market_date": "2026-02-03",
+  "ts_code": "TST001.SZ",
+  "role": "leader",
+  "event_tag": "fixture",
+  "rank_in_theme": 1,
+  "minute_rows": 240,
+  "expected": {
+    "ticks": 60,
+    "quotes": 60
+  },
+  "trading_expected": {
+    "trade_count": 1,
+    "buyer_qty_total": 100,
+    "buyer_qty_sellable": 0,
+    "seller_qty_total": 900,
+    "seller_qty_sellable": 900
+  }
+}

@@ -173,5 +173,6 @@
 - 实施计划：`docs/plans/2026-03-27-mvp-foundation-implementation-plan.md`
 - ETL 脚手架：`scripts/etl/tushare_pipeline.py`
 - ETL 运行说明：`scripts/etl/README.md`
-
+- 压缩校验脚本：`scripts/etl/validate_compression.py`
+- 进度表：`docs/plans/2026-03-28-progress.md`
 

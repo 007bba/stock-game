@@ -1,0 +1,37 @@
+[
+  {
+    "event": "clock.tick",
+    "sequence": 1,
+    "serverTime": "2026-03-28T12:00:00+00:00",
+    "payload": {
+      "seasonId": 1,
+      "gameDayNo": 1,
+      "minuteOfDay": 8,
+      "phase": "am_continuous",
+      "matchingMode": "batch_match",
+      "tickId": 1001
+    }
+  },
+  {
+    "event": "trade.matched",
+    "sequence": 2,
+    "serverTime": "2026-03-28T12:00:01+00:00",
+    "payload": {
+      "tradeId": 9001,
+      "tickId": 1001,
+      "tsCode": "600000.SH",
+      "tradePrice": 10.0,
+      "quantity": 100
+    }
+  },
+  {
+    "event": "order.updated",
+    "sequence": 3,
+    "serverTime": "2026-03-28T12:00:01+00:00",
+    "payload": {
+      "id": 5001,
+      "status": "filled",
+      "remainingQty": 0
+    }
+  }
+]

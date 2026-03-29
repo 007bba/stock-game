@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS orders (
   effective_tick_id BIGINT REFERENCES market_ticks(id) ON DELETE SET NULL,
   reject_code VARCHAR(64),
   reject_reason TEXT,
+  created_seq INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   canceled_at TIMESTAMPTZ,

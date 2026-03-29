@@ -1,0 +1,73 @@
+name: ETL Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "db/**"
+      - ".github/workflows/etl-tests.yml"
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "db/**"
+      - ".github/workflows/etl-tests.yml"
+  workflow_dispatch:
+    inputs:
+      run_db_integration:
+        description: "Run Supabase DB integration tests"
+        required: false
+        type: boolean
+        default: true
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/etl/requirements.txt
+
+      - name: Run unit tests (DB integration skipped by default)
+        run: |
+          python -m unittest discover -s tests -p "test_*.py" -v
+
+  integration-fixture:
+    if: ${{ secrets.DATABASE_URL != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_db_integration)) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/etl/requirements.txt
+          pip install psycopg2-binary
+
+      - name: Run DB integration tests against Supabase
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RUN_DB_INTEGRATION: "1"
+        run: |
+          python -m unittest tests.etl.test_db_fixture_integration -v
+          python -m unittest tests.engine.test_pg_state_transaction -v
+          python -m unittest tests.integration.test_trade_replay_db_flow -v
