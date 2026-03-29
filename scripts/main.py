@@ -83,9 +83,20 @@ def create_app_with_deps() -> FastAPI:
     )
     
     # Add CORS middleware for frontend
+    # Production domains from environment or defaults
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://stock-game-4cp.pages.dev",
+    ]
+    # Add custom origin from environment variable (for production)
+    custom_origin = os.getenv("CORS_ORIGIN")
+    if custom_origin:
+        allowed_origins.append(custom_origin)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
