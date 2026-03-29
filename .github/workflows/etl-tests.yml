@@ -46,8 +46,11 @@ jobs:
           python -m unittest discover -s tests -p "test_*.py" -v
 
   integration-fixture:
-    if: ${{ secrets.DATABASE_URL != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_db_integration == 'true')) }}
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_db_integration == 'true') }}
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      RUN_DB_INTEGRATION: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,10 +66,13 @@ jobs:
           pip install -r scripts/etl/requirements.txt
           pip install psycopg2-binary
 
+      - name: Skip DB integration when DATABASE_URL is missing
+        if: ${{ env.DATABASE_URL == '' }}
+        run: |
+          echo "DATABASE_URL secret is not configured; skipping DB integration tests."
+
       - name: Run DB integration tests against Supabase
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          RUN_DB_INTEGRATION: "1"
+        if: ${{ env.DATABASE_URL != '' }}
         run: |
           python -m unittest tests.etl.test_db_fixture_integration -v
           python -m unittest tests.engine.test_pg_state_transaction -v
