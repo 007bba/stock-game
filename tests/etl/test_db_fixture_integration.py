@@ -6,6 +6,7 @@ import unittest
 from datetime import datetime, timezone
 
 import pandas as pd
+import psycopg2
 from sqlalchemy import create_engine, text
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -30,6 +31,12 @@ class TestDBFixtureIntegration(unittest.TestCase):
         fixture_path = ROOT / "tests" / "fixtures" / "minimal_season_fixture.json"
         cls.fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
         cls.engine = create_engine(database_url, future=True)
+
+        try:
+            with cls.engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        except (psycopg2.OperationalError, OSError) as e:
+            raise unittest.SkipTest(f"Skipping DB integration tests — cannot connect: {e}")
 
         suffix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         cls.season_code = f"ITEST-{suffix}"
