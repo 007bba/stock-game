@@ -144,6 +144,11 @@ paths:
       parameters:
         - $ref: '#/components/parameters/SeasonId'
         - in: query
+          name: userId
+          required: true
+          schema:
+            type: string
+        - in: query
           name: status
           schema:
             $ref: '#/components/schemas/OrderStatus'
@@ -173,6 +178,11 @@ paths:
           schema:
             type: integer
             format: int64
+        - in: query
+          name: userId
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: Canceled
@@ -393,11 +403,16 @@ components:
 
     PlaceOrderRequest:
       type: object
-      required: [clientOrderId, tsCode, side, limitPrice, quantity]
+      required: [clientOrderId, userId, accountId, tsCode, side, limitPrice, quantity]
       properties:
         clientOrderId:
           type: string
           maxLength: 64
+        userId:
+          type: string
+        accountId:
+          type: integer
+          format: int64
         tsCode:
           type: string
         side:

@@ -34,22 +34,23 @@ def main() -> int:
     ]
 
     conn = psycopg2.connect(get_db_url())
-    conn.autocommit = True
     try:
-        with conn.cursor() as cur:
-            for ts_code, role, event_tag in stocks:
-                cur.execute(
-                    """
-                    INSERT INTO season_universe (season_id, ts_code, role, event_tag, rank_in_theme, is_active)
-                    VALUES (%s, %s, %s, %s, 1, TRUE)
-                    ON CONFLICT (season_id, ts_code) DO NOTHING
-                    """,
-                    (args.season_id, ts_code, role, event_tag),
-                )
+        # Keep all writes in a single transaction.
+        with conn:
+            with conn.cursor() as cur:
+                for ts_code, role, event_tag in stocks:
+                    cur.execute(
+                        """
+                        INSERT INTO season_universe (season_id, ts_code, role, event_tag, rank_in_theme, is_active)
+                        VALUES (%s, %s, %s, %s, 1, TRUE)
+                        ON CONFLICT (season_id, ts_code) DO NOTHING
+                        """,
+                        (args.season_id, ts_code, role, event_tag),
+                    )
 
-            cur.execute("SELECT COUNT(*) FROM season_universe WHERE season_id = %s", (args.season_id,))
-            total = cur.fetchone()[0]
-            print(f"season_universe(season_id={args.season_id}): {total} stocks")
+                cur.execute("SELECT COUNT(*) FROM season_universe WHERE season_id = %s", (args.season_id,))
+                total = cur.fetchone()[0]
+                print(f"season_universe(season_id={args.season_id}): {total} stocks")
         print("Done")
         return 0
     finally:
