@@ -46,7 +46,7 @@ jobs:
           python -m unittest discover -s tests -p "test_*.py" -v
 
   integration-fixture:
-    if: ${{ secrets.DATABASE_URL != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_db_integration)) }}
+    if: ${{ secrets.DATABASE_URL != '' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_db_integration == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
