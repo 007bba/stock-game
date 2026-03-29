@@ -11,6 +11,20 @@ from scripts.engine.state import Account, InMemoryState, Position, Quote, Tick
 from scripts.service.trading_service import TradingService
 
 
+class _FakeEventPublisher:
+    def __init__(self):
+        self.season_events: list[tuple[int, str, dict]] = []
+        self.user_events: list[tuple[str, int | None, str, dict]] = []
+
+    def publish_to_season(self, season_id: int, event: str, payload: dict):
+        self.season_events.append((season_id, event, payload))
+        return {"event": event, "payload": payload}
+
+    def publish_to_user(self, user_id: str, event: str, payload: dict, season_id: int | None = None):
+        self.user_events.append((user_id, season_id, event, payload))
+        return {"event": event, "payload": payload}
+
+
 class TestTradingService(unittest.TestCase):
     def setUp(self):
         self.state = InMemoryState()
@@ -92,6 +106,53 @@ class TestTradingService(unittest.TestCase):
         second = self.svc.join_season(season_id=1, user_id="new-user")
         self.assertFalse(second["isNewJoin"])
         self.assertEqual(first["accountId"], second["accountId"])
+
+    def test_process_tick_publishes_match_related_events(self):
+        publisher = _FakeEventPublisher()
+        service = TradingService(self.state, event_publisher=publisher)
+
+        buy_req = PlaceOrderRequest(
+            season_id=1,
+            user_id="buyer",
+            account_id=1,
+            client_order_id="buy-for-match",
+            ts_code="600000.SH",
+            side="buy",
+            limit_price=10.0,
+            quantity=100,
+        )
+        sell_req = PlaceOrderRequest(
+            season_id=1,
+            user_id="seller",
+            account_id=2,
+            client_order_id="sell-for-match",
+            ts_code="600000.SH",
+            side="sell",
+            limit_price=10.0,
+            quantity=100,
+        )
+
+        service.place_order(tick=self._tick(), quote=self._quote(), req=buy_req)
+        service.place_order(tick=self._tick(), quote=self._quote(), req=sell_req)
+
+        result = service.process_tick(tick=self._tick(tick_id=2, is_matching_point=True), quotes_by_code={"600000.SH": self._quote()})
+
+        self.assertEqual(result["tradeCount"], 1)
+
+        season_event_names = [item[1] for item in publisher.season_events]
+        self.assertIn("tick_update", season_event_names)
+        self.assertIn("trade_matched", season_event_names)
+
+        buyer_events = [item[2] for item in publisher.user_events if item[0] == "buyer"]
+        seller_events = [item[2] for item in publisher.user_events if item[0] == "seller"]
+
+        self.assertIn("order_matched", buyer_events)
+        self.assertIn("position_update", buyer_events)
+        self.assertIn("account_update", buyer_events)
+
+        self.assertIn("order_matched", seller_events)
+        self.assertIn("position_update", seller_events)
+        self.assertIn("account_update", seller_events)
 
 
 if __name__ == "__main__":

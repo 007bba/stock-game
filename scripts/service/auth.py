@@ -150,11 +150,23 @@ def get_current_user(
     if credentials is None or not credentials.credentials:
         raise _unauthorized("Missing bearer token")
 
-    token = credentials.credentials
-    
+    return _authenticate_token(credentials.credentials)
+
+
+def get_current_user_ws(token: str | None) -> AuthContext | None:
+    if token is None or not token.strip():
+        return None
+
+    try:
+        return _authenticate_token(token.strip())
+    except HTTPException:
+        return None
+
+
+def _authenticate_token(token: str) -> AuthContext:
     # Check if we should use JWKS (ES256) or legacy HS256
     use_jwks = os.getenv("SUPABASE_USE_JWKS", "true").lower() in ("true", "1", "yes")
-    
+
     if use_jwks:
         # Use JWKS verification (ES256/RS256)
         jwks = _get_jwks()
@@ -168,10 +180,10 @@ def get_current_user(
                 detail="SUPABASE_JWT_SECRET not configured",
             )
         payload = _decode_hs256_jwt(token, secret)
-    
+
     expected_audience = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
     expected_issuer = _resolve_expected_issuer()
-    
+
     _validate_claims(payload, expected_audience=expected_audience, expected_issuer=expected_issuer)
 
     sub = payload.get("sub")

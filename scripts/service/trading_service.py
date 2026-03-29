@@ -1,18 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scripts.engine.orchestrator import EngineOrchestrator, PlaceOrderRequest
 from scripts.engine.state import Account, Order, Quote, Tick
 
+if TYPE_CHECKING:
+    from scripts.engine.state import Trade
+    from scripts.service.event_publisher import EventPublisher
+
 
 class TradingService:
-    def __init__(self, state, season_id: int | None = None):
+    def __init__(self, state, season_id: int | None = None, event_publisher: "EventPublisher | None" = None):
         self.state = state
+        self.event_publisher = event_publisher
         if hasattr(state, "load_season_state") and season_id is not None:
             state.load_season_state(season_id)
         self.orchestrator = EngineOrchestrator(state=state, season_id=season_id)
+
+    def set_event_publisher(self, event_publisher: "EventPublisher | None"):
+        self.event_publisher = event_publisher
 
     def place_order(self, tick: Tick, quote: Quote, req: PlaceOrderRequest) -> dict:
         order = self.orchestrator.place_order(tick=tick, quote=quote, req=req)
@@ -20,11 +28,119 @@ class TradingService:
 
     def process_tick(self, tick: Tick, quotes_by_code: dict[str, Quote]) -> dict:
         trade_ids = self.orchestrator.process_tick(tick=tick, quotes_by_code=quotes_by_code)
+
+        if self.event_publisher is not None:
+            self._publish_tick_events(tick=tick, trade_ids=trade_ids)
+
         return {
             "tickId": tick.id,
             "tradeIds": trade_ids,
             "tradeCount": len(trade_ids),
         }
+
+    def _publish_tick_events(self, tick: Tick, trade_ids: list[int]):
+        if self.event_publisher is None:
+            return
+
+        self.event_publisher.publish_to_season(
+            season_id=tick.season_id,
+            event="tick_update",
+            payload={
+                "seasonId": tick.season_id,
+                "tickId": tick.id,
+                "gameDayNo": tick.game_day_no,
+                "minuteOfDay": tick.minute_of_day,
+                "phase": tick.phase,
+                "matchingMode": tick.matching_mode,
+                "tradeCount": len(trade_ids),
+            },
+        )
+
+        if not trade_ids:
+            return
+
+        trade_id_set = set(trade_ids)
+        trades_by_id = {trade.id: trade for trade in self.state.trades if trade.id in trade_id_set}
+        impacted_users: set[str] = set()
+        impacted_positions: set[tuple[str, str]] = set()
+
+        for trade_id in trade_ids:
+            trade = trades_by_id.get(trade_id)
+            if trade is None:
+                continue
+
+            self.event_publisher.publish_to_season(
+                season_id=tick.season_id,
+                event="trade_matched",
+                payload=self._trade_to_dto(trade),
+            )
+
+            buy_order = self.state.orders.get(trade.buy_order_id)
+            sell_order = self.state.orders.get(trade.sell_order_id)
+
+            if buy_order is not None:
+                impacted_users.add(str(buy_order.user_id))
+                impacted_positions.add((str(buy_order.user_id), trade.ts_code))
+                self.event_publisher.publish_to_user(
+                    user_id=str(buy_order.user_id),
+                    season_id=tick.season_id,
+                    event="order_matched",
+                    payload={
+                        "seasonId": tick.season_id,
+                        "order": self._order_to_dto(buy_order),
+                        "trade": self._trade_to_dto(trade),
+                        "role": "buy",
+                    },
+                )
+
+            if sell_order is not None:
+                impacted_users.add(str(sell_order.user_id))
+                impacted_positions.add((str(sell_order.user_id), trade.ts_code))
+                self.event_publisher.publish_to_user(
+                    user_id=str(sell_order.user_id),
+                    season_id=tick.season_id,
+                    event="order_matched",
+                    payload={
+                        "seasonId": tick.season_id,
+                        "order": self._order_to_dto(sell_order),
+                        "trade": self._trade_to_dto(trade),
+                        "role": "sell",
+                    },
+                )
+
+        for user_id, ts_code in impacted_positions:
+            position = self.state.get_position(tick.season_id, user_id, ts_code)
+            self.event_publisher.publish_to_user(
+                user_id=user_id,
+                season_id=tick.season_id,
+                event="position_update",
+                payload={
+                    "seasonId": tick.season_id,
+                    "userId": user_id,
+                    "tsCode": ts_code,
+                    "qtyTotal": position.qty_total,
+                    "qtySellable": position.qty_sellable,
+                    "avgCost": position.avg_cost,
+                },
+            )
+
+        for user_id in impacted_users:
+            account = self._find_account_in_state(season_id=tick.season_id, user_id=user_id)
+            if account is None:
+                continue
+            self.event_publisher.publish_to_user(
+                user_id=user_id,
+                season_id=tick.season_id,
+                event="account_update",
+                payload={
+                    "seasonId": tick.season_id,
+                    "userId": user_id,
+                    "accountId": account.id,
+                    "availableCash": account.available_cash,
+                    "frozenCash": account.frozen_cash,
+                    "realizedPnl": account.realized_pnl,
+                },
+            )
 
     def list_orders(self, season_id: int, user_id: str, status: str | None = None, ts_code: str | None = None) -> list[dict]:
         result: list[dict] = []
@@ -161,4 +277,20 @@ class TradingService:
             "rejectReason": raw["reject_reason"],
             "createdAt": raw["created_at"].isoformat() if raw.get("created_at") else None,
             "updatedAt": raw["updated_at"].isoformat() if raw.get("updated_at") else None,
+        }
+
+    def _trade_to_dto(self, trade: "Trade") -> dict:
+        return {
+            "tradeId": trade.id,
+            "seasonId": trade.season_id,
+            "tickId": trade.tick_id,
+            "tsCode": trade.ts_code,
+            "price": trade.trade_price,
+            "qty": trade.quantity,
+            "buyOrderId": trade.buy_order_id,
+            "sellOrderId": trade.sell_order_id,
+            "feeBuy": trade.fee_buy,
+            "feeSell": trade.fee_sell,
+            "taxSell": trade.tax_sell,
+            "matchedAt": trade.matched_at.isoformat() if trade.matched_at else None,
         }

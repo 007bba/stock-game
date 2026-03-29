@@ -67,6 +67,7 @@ def make_test_token(
 
 class TestOrderApi(unittest.TestCase):
     def setUp(self):
+        os.environ["SUPABASE_USE_JWKS"] = "false"
         os.environ["SUPABASE_JWT_SECRET"] = "unit-test-secret"
         os.environ["SUPABASE_JWT_ISSUER"] = "https://supabase.test/auth/v1"
 
@@ -111,6 +112,7 @@ class TestOrderApi(unittest.TestCase):
         self.buyer_headers = {"Authorization": f"Bearer {make_test_token('buyer')}"}
 
     def tearDown(self):
+        os.environ.pop("SUPABASE_USE_JWKS", None)
         os.environ.pop("SUPABASE_JWT_SECRET", None)
         os.environ.pop("SUPABASE_JWT_ISSUER", None)
 

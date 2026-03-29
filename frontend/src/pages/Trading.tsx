@@ -4,7 +4,7 @@ import AccountInfo from '../components/AccountInfo'
 import KlineChart from '../components/KlineChart'
 import OrderBook from '../components/OrderBook'
 import OrderForm, { type TradeSide } from '../components/OrderForm'
-import OrderList, { type OrderItem } from '../components/OrderList'
+import OrderList from '../components/OrderList'
 import PositionList, { type PositionItem } from '../components/PositionList'
 import {
   SUPPORTED_SYMBOLS,
@@ -21,13 +21,8 @@ import {
   shouldFallbackToMock,
   toUiOrder,
 } from '../services/tradingApi'
+import { useTradingWebSocket } from '../hooks/useTradingWebSocket'
 import { useTradingStore } from '../stores/tradingStore'
-
-const initialPositions: PositionItem[] = [
-  { tsCode: '600000.SH', qty: 1000, avgPrice: 10.21 },
-  { tsCode: '000001.SZ', qty: 500, avgPrice: 12.05 },
-  { tsCode: '600519.SH', qty: 100, avgPrice: 1698.0 },
-]
 
 const DEFAULT_SEASON_ID = Number(import.meta.env.VITE_DEFAULT_SEASON_ID ?? 1)
 const FORCE_MOCK_TRADING = String(import.meta.env.VITE_USE_MOCK_TRADING ?? 'false').toLowerCase() === 'true'
@@ -102,34 +97,30 @@ function TradingPage() {
   const currentSeasonId = useTradingStore((state) => state.currentSeasonId)
   const currentAccountId = useTradingStore((state) => state.currentAccountId)
   const selectedSymbol = useTradingStore((state) => state.selectedSymbol)
+  const availableCash = useTradingStore((state) => state.availableCash)
+  const positions = useTradingStore((state) => state.positions)
+  const orders = useTradingStore((state) => state.orders)
+  const wsConnected = useTradingStore((state) => state.wsConnected)
+  const wsReconnectAttempts = useTradingStore((state) => state.wsReconnectAttempts)
   const setSelectedSymbol = useTradingStore((state) => state.setSelectedSymbol)
+  const setAvailableCash = useTradingStore((state) => state.setAvailableCash)
+  const setPositions = useTradingStore((state) => state.setPositions)
+  const setOrders = useTradingStore((state) => state.setOrders)
+  const prependOrder = useTradingStore((state) => state.prependOrder)
+  const resetRealtimeState = useTradingStore((state) => state.resetRealtimeState)
   const seasonId = currentSeasonId ?? DEFAULT_SEASON_ID
   const hasBoundAccount = currentSeasonId !== null && currentAccountId !== null
 
-  const [availableCash, setAvailableCash] = useState<number>(1000000)
-  const [positions, setPositions] = useState<PositionItem[]>(initialPositions)
-  const [orders, setOrders] = useState<OrderItem[]>([
-    {
-      orderId: 'MOCK-INIT-1',
-      tsCode: '600000.SH',
-      side: 'BUY',
-      qty: 1000,
-      price: 10.21,
-      status: 'FILLED',
-    },
-    {
-      orderId: 'MOCK-INIT-2',
-      tsCode: '000001.SZ',
-      side: 'BUY',
-      qty: 500,
-      price: 12.05,
-      status: 'PARTIAL',
-    },
-  ])
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
   const [currentBook, setCurrentBook] = useState<MockOrderBookSnapshot>(() =>
     getMockOrderBook(selectedSymbol),
   )
+
+  useTradingWebSocket({ enabled: !FORCE_MOCK_TRADING && hasBoundAccount })
+
+  useEffect(() => {
+    resetRealtimeState()
+  }, [currentAccountId, currentSeasonId, resetRealtimeState])
 
   useEffect(() => {
     setCurrentBook(getMockOrderBook(selectedSymbol))
@@ -157,7 +148,7 @@ function TradingPage() {
     return () => {
       disposed = true
     }
-  }, [currentAccountId, currentSeasonId, selectedSymbol])
+  }, [currentAccountId, currentSeasonId, selectedSymbol, setOrders])
 
   const positionsWithLastPrice = useMemo(() => {
     return positions.map((item) => ({
@@ -189,17 +180,17 @@ function TradingPage() {
           })
 
           const uiOrder = toUiOrder(apiOrder)
-          setOrders((prev) => [uiOrder, ...prev].slice(0, 30))
+          prependOrder(uiOrder)
 
           const executedQty = Math.max(0, apiOrder.quantity - apiOrder.remainingQty)
           const cashDelta = params.side === 'BUY' ? -executedQty * params.price : executedQty * params.price
 
           if (cashDelta !== 0) {
-            setAvailableCash((prev) => round2(prev + cashDelta))
+            setAvailableCash(round2(useTradingStore.getState().availableCash + cashDelta))
           }
           if (executedQty > 0) {
-            setPositions((prev) =>
-              applyExecutionToPositions(prev, {
+            setPositions(
+              applyExecutionToPositions(useTradingStore.getState().positions, {
                 symbol: selectedSymbol,
                 side: params.side,
                 price: params.price,
@@ -242,15 +233,15 @@ function TradingPage() {
         },
       )
 
-      setOrders((prev) => [result.order, ...prev].slice(0, 30))
+      prependOrder(result.order)
 
       if (result.cashDelta !== 0) {
-        setAvailableCash((prev) => round2(prev + result.cashDelta))
+        setAvailableCash(round2(useTradingStore.getState().availableCash + result.cashDelta))
       }
 
       if (result.executedQty > 0) {
-        setPositions((prev) =>
-          applyExecutionToPositions(prev, {
+        setPositions(
+          applyExecutionToPositions(useTradingStore.getState().positions, {
             symbol: selectedSymbol,
             side: params.side,
             price: params.price,
@@ -280,7 +271,7 @@ function TradingPage() {
           交易终端
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-          P7-T5 到 P7-T12 已推进：三栏布局、K 线、后端下单优先 + mock 回退、响应式优化。
+          P9 实时推送已接入：WebSocket 鉴权连接、自动重连、持仓与订单实时更新。
         </Typography.Paragraph>
       </Space>
 
@@ -304,6 +295,11 @@ function TradingPage() {
             </Tag>
             <Tag color="blue">交易日 T+1 规则</Tag>
             {!FORCE_MOCK_TRADING && <Tag color="green">后端 API 优先</Tag>}
+            {!FORCE_MOCK_TRADING && hasBoundAccount && (
+              <Tag color={wsConnected ? 'green' : wsReconnectAttempts > 0 ? 'orange' : 'default'}>
+                {wsConnected ? 'WS 已连接' : wsReconnectAttempts > 0 ? `WS 重连中(${wsReconnectAttempts}/5)` : 'WS 未连接'}
+              </Tag>
+            )}
           </Space>
         </Col>
         <Col xs={24} md={12}>
