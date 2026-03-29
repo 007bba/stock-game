@@ -1,7 +1,8 @@
 # Stock Game 明日任务安排（P6 收口 + MVP 交付检查）
 
 - 文档日期：2026-03-28（面向 2026-03-29 执行）
-- 当前项目状态：**P5 已完成（24/24 测试通过），P6 收尾已完成，本地验证全部通过，等待 GitHub Actions 云端验证**
+- 最后更新：2026-03-29 12:33（CI 修复后重新推送）
+- 当前项目状态：**P5+P6 完成，本地 24/24 测试通过，CI 已修复（本地 Postgres 容器替代 Supabase），等待云端验证**
 - 目标：完成 MVP 交付前最后检查，确认 CI/CD 链路真实可用
 
 ---
@@ -63,7 +64,9 @@ git push origin main
 
 ### Task 2：手动触发 workflow_dispatch 验证 DB 集成（云端）
 
-**前置条件：** Task 1 完成，且 `secrets.DATABASE_URL` 已在仓库中配置
+**前置条件：** Task 1 完成。**不再需要配置 GitHub Secrets DATABASE_URL**（已改为本地 Postgres 容器）。
+
+**背景说明：** Supabase 数据库仅有 IPv6 地址，GitHub Actions runner 不支持 IPv6 出站连接。已将 CI 改为使用 `postgres:15` service 容器，无需外部连接。
 
 **操作步骤：**
 
@@ -73,15 +76,10 @@ git push origin main
 
 **验证方式：**
 - `integration-fixture` job 状态为绿色通过
-- 日志中包含：
-  - `pip install psycopg2-binary` 成功
-  - `tests.etl.test_db_fixture_integration` → `OK`
-  - `tests.engine.test_pg_state_transaction` → `OK`
-  - `tests.integration.test_trade_replay_db_flow` → `OK`
-
-**如 `secrets.DATABASE_URL` 未配置：**
-- 跳过 Task 2，仅确认 Task 1 单测通过
-- 在文档中标注 "DB 集成测试需人工配置 GitHub Secrets DATABASE_URL"
+- 日志中包含 postgres service 启动成功
+- `tests.etl.test_db_fixture_integration` → `OK`
+- `tests.engine.test_pg_state_transaction` → `OK`
+- `tests.integration.test_trade_replay_db_flow` → `OK`
 
 ---
 
@@ -158,11 +156,11 @@ python -m unittest discover -s tests -p "test_*.py" -v
 ### 4.1 交付清单（checklist）
 
 - [ ] Task 1：`push` 触发 GitHub Actions `unit-tests` 绿色通过
-- [ ] Task 2：`workflow_dispatch` 触发 `integration-fixture` 绿色通过（若 Secrets 已配置）
-- [ ] Task 3：`init_engine_db.py` 执行成功，DB 有种子数据
-- [ ] Task 4：`fill_market_ticks.py` 写入 600 条 tick 记录
-- [ ] Task 5：6 份文档复核一致
-- [ ] Task 6：24/24 测试全部通过，0 skipped
+- [ ] Task 2：`workflow_dispatch` 触发 `integration-fixture` 绿色通过（本地 Postgres 容器，无需 Secrets）
+- [x] Task 3：`init_engine_db.py` 执行成功，DB 有种子数据 ✅
+- [x] Task 4：`fill_market_ticks.py` 写入 1200 条 tick 记录 ✅
+- [x] Task 5：6 份文档复核一致 ✅（openapi.yaml 补齐 userId/accountId）
+- [x] Task 6：24/24 测试全部通过，0 skipped ✅
 
 ### 4.2 最终输出文档
 
@@ -201,7 +199,7 @@ python scripts/service/fill_market_ticks.py --season-id 1 --reset
 
 ## 六、已知限制
 
-1. **GitHub Secrets DATABASE_URL**：需仓库管理员在 GitHub 仓库 Settings → Secrets → Actions 中手动添加 `DATABASE_URL`，AI 无法自动配置云端 Secrets
+1. **CI 使用本地 Postgres 容器**：因 GitHub Actions runner 不支持 IPv6 出站连接，Supabase（仅 IPv6）无法在 CI 中直连，已改为 `postgres:15` service 容器。生产/本地环境仍使用 Supabase
 2. **Supabase 连接池**：PgBouncer 在某些长事务场景下可能报 "connection already closed"，如遇此情况需在 `pg_state.py` 增加重试逻辑
 3. **tushare API 限流**：ETL 管道测试中 `test_call_tushare_with_retry` 存在概率性重试（正常行为），不影响交付
 
