@@ -10,9 +10,11 @@ export interface OrderDraft {
 
 interface TradingState {
   currentSeasonId: number | null
+  currentAccountId: number | null
   selectedSymbol: string
   orderDraft: OrderDraft
   setCurrentSeason: (seasonId: number | null) => void
+  setCurrentAccount: (accountId: number | null) => void
   setSelectedSymbol: (symbol: string) => void
   updateOrderDraft: (patch: Partial<OrderDraft>) => void
   resetOrderDraft: () => void
@@ -26,11 +28,16 @@ const defaultDraft: OrderDraft = {
 
 export const useTradingStore = create<TradingState>((set) => ({
   currentSeasonId: null,
+  currentAccountId: null,
   selectedSymbol: '000001.SZ',
   orderDraft: defaultDraft,
 
   setCurrentSeason: (seasonId) => {
     set({ currentSeasonId: seasonId })
+  },
+
+  setCurrentAccount: (accountId) => {
+    set({ currentAccountId: accountId })
   },
 
   setSelectedSymbol: (symbol) => {

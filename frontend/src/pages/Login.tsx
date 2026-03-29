@@ -40,12 +40,18 @@ function LoginPage() {
   const onFinish = async (values: AuthFormValues) => {
     try {
       if (isRegisterMode) {
-        await register({
+        const result = await register({
           email: values.email,
           password: values.password,
           displayName: values.displayName,
           remember: values.remember ?? true,
         })
+
+        if (result.needsEmailConfirmation) {
+          message.info('注册成功，请先完成邮箱确认后再登录')
+          return
+        }
+
         message.success('注册成功，已自动登录')
       } else {
         await login({
@@ -83,9 +89,13 @@ function LoginPage() {
               进入赛季大厅
             </Button>
             <Button
-              onClick={() => {
-                logout()
-                message.info('已退出登录')
+              onClick={async () => {
+                try {
+                  await logout()
+                  message.info('已退出登录')
+                } catch {
+                  // 错误信息由 store 维护并展示在页面 Alert
+                }
               }}
             >
               退出登录
@@ -97,9 +107,9 @@ function LoginPage() {
   }
 
   return (
-    <Card title="登录 / 注册（Mock）" style={{ maxWidth: 560, margin: '0 auto' }}>
+    <Card title="登录 / 注册" style={{ maxWidth: 560, margin: '0 auto' }}>
       <Typography.Paragraph type="secondary">
-        当前为 P7-T3 的本地 mock 认证流程；P8 阶段会替换为 Supabase Auth。
+        当前为 Supabase Auth 认证流程，登录后可访问赛季大厅和交易界面。
       </Typography.Paragraph>
 
       <Tabs activeKey={mode} items={modeItems} onChange={onModeChange} />

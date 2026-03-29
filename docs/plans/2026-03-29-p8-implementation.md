@@ -49,17 +49,9 @@ Supabase Auth
 
 ```sql
 -- Supabase Auth 自动创建 auth.users 表
--- 我们需要关联 accounts 表
-
--- 方案 A：在 accounts 表添加 user_id 字段
-ALTER TABLE accounts 
-ADD COLUMN user_id UUID REFERENCES auth.users(id);
-
--- 创建索引
-CREATE INDEX idx_accounts_user_id ON accounts(user_id);
-
--- 方案 B：使用 Supabase 触发器自动创建账户
--- （推荐，在用户注册时自动创建初始账户）
+-- 当前 schema 的 accounts 表已经是 season_id + user_id 维度
+-- 因此 P8 采用：注册仅创建 auth.users 用户，不立即创建 accounts
+-- 在“加入赛季”动作中单事务创建 accounts 行（幂等）
 ```
 
 ---
@@ -81,10 +73,16 @@ CREATE INDEX idx_accounts_user_id ON accounts(user_id);
 
 3. 获取配置信息
    - Settings → API
-   - 记录：`URL` 和 `anon` key
+  - 记录：`URL`、`anon` key、`JWT Secret`
+
+4. 本地环境变量映射
+  - 前端：`frontend/.env.local` 中配置 `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`
+  - 后端：根目录 `.env` 中配置 `SUPABASE_URL`、`SUPABASE_JWT_SECRET`
+  - 严禁把 `SUPABASE_JWT_SECRET` 写入代码或提交到仓库
 
 **验证方式**：
 - Dashboard 中看到 Email provider 已启用
+- 本地环境文件配置完成（可参考 `.env.example` 与 `frontend/.env.example`）
 
 ---
 
@@ -100,7 +98,7 @@ CREATE INDEX idx_accounts_user_id ON accounts(user_id);
 
 2. 创建 Supabase 客户端配置
    ```typescript
-   // frontend/src/lib/supabase.ts
+  // frontend/src/services/supabase.ts
    import { createClient } from '@supabase/supabase-js'
    
    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -120,7 +118,7 @@ CREATE INDEX idx_accounts_user_id ON accounts(user_id);
    ```typescript
    // frontend/src/stores/authStore.ts
    import { create } from 'zustand'
-   import { supabase } from '../lib/supabase'
+  import { supabase } from '../services/supabase'
    
    interface AuthState {
      user: any | null

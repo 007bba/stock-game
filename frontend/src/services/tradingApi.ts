@@ -15,7 +15,6 @@ export type ApiOrderStatus =
 
 export interface PlaceOrderApiParams {
   seasonId: number
-  userId: string
   accountId: number
   symbol: string
   side: TradeSide
@@ -40,7 +39,6 @@ export interface ApiOrder {
 
 interface PlaceOrderRequest {
   clientOrderId: string
-  userId: string
   accountId: number
   tsCode: string
   side: ApiOrderSide
@@ -89,7 +87,6 @@ export function toUiOrder(order: ApiOrder): OrderItem {
 export async function placeOrderApi(params: PlaceOrderApiParams): Promise<ApiOrder> {
   const payload: PlaceOrderRequest = {
     clientOrderId: createClientOrderId(),
-    userId: params.userId,
     accountId: params.accountId,
     tsCode: params.symbol,
     side: toApiSide(params.side),
@@ -102,11 +99,10 @@ export async function placeOrderApi(params: PlaceOrderApiParams): Promise<ApiOrd
 
 export async function listOrdersApi(params: {
   seasonId: number
-  userId: string
   status?: ApiOrderStatus
   tsCode?: string
 }): Promise<ApiOrder[]> {
-  const search = new URLSearchParams({ userId: params.userId })
+  const search = new URLSearchParams()
   if (params.status) {
     search.set('status', params.status)
   }
@@ -114,7 +110,11 @@ export async function listOrdersApi(params: {
     search.set('tsCode', params.tsCode)
   }
 
-  return api.get<ApiOrder[]>(`/v1/seasons/${params.seasonId}/orders?${search.toString()}`)
+  const query = search.toString()
+  const path = query
+    ? `/v1/seasons/${params.seasonId}/orders?${query}`
+    : `/v1/seasons/${params.seasonId}/orders`
+  return api.get<ApiOrder[]>(path)
 }
 
 export function extractApiErrorMessage(error: unknown, fallback: string): string {

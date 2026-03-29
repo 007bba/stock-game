@@ -9,21 +9,38 @@ import App from './App.tsx'
 import LoginPage from './pages/Login.tsx'
 import LobbyPage from './pages/Lobby.tsx'
 import TradingPage from './pages/Trading.tsx'
+import { AuthBootstrap, ProtectedRoute } from './components/AuthGuards.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ConfigProvider locale={zhCN}>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<App />}>
-            <Route index element={<Navigate to="/lobby" replace />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/lobby" element={<LobbyPage />} />
-            <Route path="/trading" element={<TradingPage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/lobby" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <AuthBootstrap>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<App />}>
+              <Route index element={<Navigate to="/lobby" replace />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/lobby"
+                element={
+                  <ProtectedRoute>
+                    <LobbyPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/trading"
+                element={
+                  <ProtectedRoute>
+                    <TradingPage />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
+            <Route path="*" element={<Navigate to="/lobby" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthBootstrap>
     </ConfigProvider>
   </StrictMode>,
 )

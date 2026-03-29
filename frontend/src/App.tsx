@@ -30,7 +30,7 @@ function App() {
           <Typography.Text strong className="app-title">
             Stock Game
           </Typography.Text>
-          <Tag color="gold">P7</Tag>
+          <Tag color="gold">P8</Tag>
         </Space>
         <Menu
           mode="horizontal"

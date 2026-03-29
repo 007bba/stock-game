@@ -1,3 +1,5 @@
+import { supabase } from './supabase'
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -13,11 +15,19 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, method: HttpMethod, body?: unknown, token?: string): Promise<T> {
+  let authToken = token
+  if (!authToken) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    authToken = session?.access_token
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   })

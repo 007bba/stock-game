@@ -21,7 +21,6 @@ import {
   shouldFallbackToMock,
   toUiOrder,
 } from '../services/tradingApi'
-import { useAuthStore } from '../stores/authStore'
 import { useTradingStore } from '../stores/tradingStore'
 
 const initialPositions: PositionItem[] = [
@@ -31,7 +30,6 @@ const initialPositions: PositionItem[] = [
 ]
 
 const DEFAULT_SEASON_ID = Number(import.meta.env.VITE_DEFAULT_SEASON_ID ?? 1)
-const DEFAULT_ACCOUNT_ID = Number(import.meta.env.VITE_DEFAULT_ACCOUNT_ID ?? 1)
 const FORCE_MOCK_TRADING = String(import.meta.env.VITE_USE_MOCK_TRADING ?? 'false').toLowerCase() === 'true'
 
 function round2(value: number): number {
@@ -101,13 +99,12 @@ function TradingPage() {
   const screens = Grid.useBreakpoint()
   const isMobile = !screens.md
 
-  const currentUser = useAuthStore((state) => state.currentUser)
   const currentSeasonId = useTradingStore((state) => state.currentSeasonId)
+  const currentAccountId = useTradingStore((state) => state.currentAccountId)
   const selectedSymbol = useTradingStore((state) => state.selectedSymbol)
   const setSelectedSymbol = useTradingStore((state) => state.setSelectedSymbol)
   const seasonId = currentSeasonId ?? DEFAULT_SEASON_ID
-  const userId = currentUser?.id ?? 'buyer'
-  const accountId = DEFAULT_ACCOUNT_ID
+  const hasBoundAccount = currentSeasonId !== null && currentAccountId !== null
 
   const [availableCash, setAvailableCash] = useState<number>(1000000)
   const [positions, setPositions] = useState<PositionItem[]>(initialPositions)
@@ -141,12 +138,12 @@ function TradingPage() {
   }, [selectedSymbol])
 
   useEffect(() => {
-    if (FORCE_MOCK_TRADING) {
+    if (FORCE_MOCK_TRADING || currentSeasonId === null || currentAccountId === null) {
       return
     }
 
     let disposed = false
-    void listOrdersApi({ seasonId, userId, tsCode: selectedSymbol })
+    void listOrdersApi({ seasonId: currentSeasonId, tsCode: selectedSymbol })
       .then((apiOrders) => {
         if (disposed || apiOrders.length === 0) {
           return
@@ -160,7 +157,7 @@ function TradingPage() {
     return () => {
       disposed = true
     }
-  }, [seasonId, userId, selectedSymbol])
+  }, [currentAccountId, currentSeasonId, selectedSymbol])
 
   const positionsWithLastPrice = useMemo(() => {
     return positions.map((item) => ({
@@ -180,12 +177,11 @@ function TradingPage() {
   const handleSubmit = async (params: { side: TradeSide; price: number; qty: number }): Promise<void> => {
     setIsSubmitting(true)
     try {
-      if (!FORCE_MOCK_TRADING) {
+      if (!FORCE_MOCK_TRADING && currentSeasonId !== null && currentAccountId !== null) {
         try {
           const apiOrder = await placeOrderApi({
-            seasonId,
-            userId,
-            accountId,
+            seasonId: currentSeasonId,
+            accountId: currentAccountId,
             symbol: selectedSymbol,
             side: params.side,
             price: params.price,
@@ -229,6 +225,8 @@ function TradingPage() {
           }
           message.warning('后端交易 API 暂不可用，已自动切换到 mock 下单')
         }
+      } else if (!FORCE_MOCK_TRADING && !hasBoundAccount) {
+        message.info('当前未绑定赛季账户，已使用 mock 下单')
       }
 
       const result = await submitMockOrder(
@@ -286,19 +284,24 @@ function TradingPage() {
         </Typography.Paragraph>
       </Space>
 
-      {!currentSeasonId && (
+      {(currentSeasonId === null || currentAccountId === null) && (
         <Alert
           type="warning"
           showIcon
-          message="当前未绑定赛季"
-          description="你可以继续使用 mock 模式进行功能演示；从赛季大厅加入后会自动绑定赛季。"
+          message="当前未绑定赛季或账户"
+          description="请先从赛季大厅加入赛季以完成开户绑定；当前会自动使用 mock 模式演示交易。"
         />
       )}
 
       <Row justify="space-between" align={isMobile ? 'top' : 'middle'} gutter={[12, 12]}>
         <Col xs={24} md={12}>
           <Space wrap>
-            <Tag color="gold">{currentSeasonId ? `赛季 #${currentSeasonId}` : `默认赛季 #${seasonId}`}</Tag>
+            <Tag color="gold">
+              {currentSeasonId !== null ? `赛季 #${currentSeasonId}` : `默认赛季 #${seasonId}`}
+            </Tag>
+            <Tag color={currentAccountId !== null ? 'cyan' : 'orange'}>
+              {currentAccountId !== null ? `账户 #${currentAccountId}` : '未绑定账户'}
+            </Tag>
             <Tag color="blue">交易日 T+1 规则</Tag>
             {!FORCE_MOCK_TRADING && <Tag color="green">后端 API 优先</Tag>}
           </Space>

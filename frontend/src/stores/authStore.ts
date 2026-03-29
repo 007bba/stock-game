@@ -1,80 +1,79 @@
+import type { Session, User } from '@supabase/supabase-js'
 import { create } from 'zustand'
-import { loginMockUser, registerMockUser, type MockAuthUser } from '../services/mockAuth'
+import { supabase } from '../services/supabase'
 
 export type AuthMode = 'login' | 'register'
 
-const SESSION_KEY = 'stock-game:auth-session'
+export interface AuthUser {
+  id: string
+  email: string
+  displayName: string
+  createdAt: string
+}
 
-function readSession(): MockAuthUser | null {
-  if (typeof window === 'undefined') {
+function normalizeEmail(email: string | null | undefined): string {
+  return (email ?? '').trim().toLowerCase()
+}
+
+function inferDisplayName(user: User): string {
+  const metadataName = user.user_metadata?.display_name
+  if (typeof metadataName === 'string' && metadataName.trim()) {
+    return metadataName.trim()
+  }
+
+  const email = normalizeEmail(user.email)
+  const localName = email.split('@')[0]
+  if (localName) {
+    return localName
+  }
+
+  return 'player'
+}
+
+function toAuthUser(user: User | null): AuthUser | null {
+  if (!user) {
     return null
   }
 
-  const sources = [localStorage, sessionStorage]
-  for (const source of sources) {
-    try {
-      const raw = source.getItem(SESSION_KEY)
-      if (!raw) {
-        continue
-      }
-      const parsed = JSON.parse(raw) as MockAuthUser
-      if (parsed?.id && parsed?.email) {
-        return parsed
-      }
-    } catch {
-      continue
-    }
+  return {
+    id: user.id,
+    email: normalizeEmail(user.email),
+    displayName: inferDisplayName(user),
+    createdAt: user.created_at,
   }
-
-  return null
 }
 
-function writeSession(user: MockAuthUser, remember: boolean): void {
-  if (typeof window === 'undefined') {
-    return
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
   }
-
-  const payload = JSON.stringify(user)
-  if (remember) {
-    localStorage.setItem(SESSION_KEY, payload)
-    sessionStorage.removeItem(SESSION_KEY)
-    return
-  }
-
-  sessionStorage.setItem(SESSION_KEY, payload)
-  localStorage.removeItem(SESSION_KEY)
+  return fallback
 }
 
-function clearSession(): void {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  localStorage.removeItem(SESSION_KEY)
-  sessionStorage.removeItem(SESSION_KEY)
-}
+let authListenerRegistered = false
 
 interface AuthState {
   mode: AuthMode
-  currentUser: MockAuthUser | null
+  currentUser: AuthUser | null
+  session: Session | null
   isLoading: boolean
+  isInitialized: boolean
   errorMessage: string | null
   setMode: (mode: AuthMode) => void
   clearError: () => void
+  initialize: () => Promise<void>
+  getAccessToken: () => Promise<string | null>
   login: (params: { email: string; password: string; remember: boolean }) => Promise<void>
-  register: (params: {
-    email: string
-    password: string
-    displayName?: string
-    remember: boolean
-  }) => Promise<void>
-  logout: () => void
+  register: (params: { email: string; password: string; displayName?: string; remember: boolean }) => Promise<{ needsEmailConfirmation: boolean }>
+  logout: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   mode: 'login',
-  currentUser: readSession(),
+  currentUser: null,
+  session: null,
   isLoading: false,
+  isInitialized: false,
   errorMessage: null,
 
   setMode: (mode) => {
@@ -85,36 +84,127 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ errorMessage: null })
   },
 
-  login: async ({ email, password, remember }) => {
+  initialize: async () => {
     set({ isLoading: true, errorMessage: null })
 
     try {
-      const user = await loginMockUser({ email, password })
-      writeSession(user, remember)
-      set({ currentUser: user, isLoading: false })
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      set({
+        session,
+        currentUser: toAuthUser(session?.user ?? null),
+        isInitialized: true,
+        isLoading: false,
+      })
+
+      if (!authListenerRegistered) {
+        authListenerRegistered = true
+        supabase.auth.onAuthStateChange((_event, nextSession) => {
+          set({
+            session: nextSession,
+            currentUser: toAuthUser(nextSession?.user ?? null),
+            isInitialized: true,
+          })
+        })
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : '登录失败，请稍后再试'
+      set({
+        errorMessage: toErrorMessage(error, '初始化登录态失败'),
+        isInitialized: true,
+        isLoading: false,
+      })
+    }
+  },
+
+  getAccessToken: async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    return session?.access_token ?? null
+  },
+
+  login: async ({ email, password, remember: _remember }) => {
+    void _remember
+    set({ isLoading: true, errorMessage: null })
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: normalizeEmail(email), password })
+      if (error) {
+        throw error
+      }
+
+      set({
+        session: data.session,
+        currentUser: toAuthUser(data.user),
+        isLoading: false,
+        isInitialized: true,
+      })
+    } catch (error) {
+      const message = toErrorMessage(error, '登录失败，请稍后再试')
       set({ errorMessage: message, isLoading: false })
       throw error
     }
   },
 
-  register: async ({ email, password, displayName, remember }) => {
+  register: async ({ email, password, displayName, remember: _remember }) => {
+    void _remember
     set({ isLoading: true, errorMessage: null })
 
     try {
-      const user = await registerMockUser({ email, password, displayName })
-      writeSession(user, remember)
-      set({ currentUser: user, isLoading: false })
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizeEmail(email),
+        password,
+        options: {
+          data: {
+            display_name: displayName?.trim() ?? '',
+          },
+        },
+      })
+
+      if (error) {
+        throw error
+      }
+
+      const needsEmailConfirmation = !data.session
+
+      set({
+        session: data.session,
+        currentUser: toAuthUser(data.user),
+        isLoading: false,
+        isInitialized: true,
+      })
+
+      return { needsEmailConfirmation }
     } catch (error) {
-      const message = error instanceof Error ? error.message : '注册失败，请稍后再试'
+      const message = toErrorMessage(error, '注册失败，请稍后再试')
       set({ errorMessage: message, isLoading: false })
       throw error
     }
   },
 
-  logout: () => {
-    clearSession()
-    set({ currentUser: null, errorMessage: null, isLoading: false, mode: 'login' })
+  logout: async () => {
+    set({ isLoading: true, errorMessage: null })
+
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        throw error
+      }
+
+      set({
+        currentUser: null,
+        session: null,
+        errorMessage: null,
+        isLoading: false,
+        isInitialized: true,
+        mode: 'login',
+      })
+    } catch (error) {
+      const message = toErrorMessage(error, '退出登录失败，请稍后再试')
+      set({ errorMessage: message, isLoading: false })
+      throw error
+    }
   },
 }))

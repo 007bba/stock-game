@@ -22,6 +22,11 @@ import {
 } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { createMockSeason, joinMockSeason, listMockSeasons, type LobbySeason } from '../services/mockSeason'
+import {
+  extractSeasonApiErrorMessage,
+  joinSeasonApi,
+  shouldFallbackToMockSeason,
+} from '../services/seasonApi'
 import { useAuthStore } from '../stores/authStore'
 import { useTradingStore } from '../stores/tradingStore'
 
@@ -52,6 +57,7 @@ function LobbyPage() {
   const navigate = useNavigate()
   const currentUser = useAuthStore((state) => state.currentUser)
   const setCurrentSeason = useTradingStore((state) => state.setCurrentSeason)
+  const setCurrentAccount = useTradingStore((state) => state.setCurrentAccount)
   const [createForm] = Form.useForm<CreateSeasonFormValues>()
 
   const [seasons, setSeasons] = useState<LobbySeason[]>([])
@@ -107,30 +113,54 @@ function LobbyPage() {
   }
 
   const handleJoin = async (season: LobbySeason): Promise<void> => {
-    if (season.joined) {
-      setCurrentSeason(season.id)
-      navigate('/trading')
-      return
-    }
-
     if (!ensureLogin() || !currentUser) {
       return
     }
 
     setJoiningSeasonId(season.id)
     try {
-      const result = await joinMockSeason({ seasonId: season.id, userId: currentUser.id })
-      setSeasons((prev) => prev.map((item) => (item.id === season.id ? result.season : item)))
+      const result = await joinSeasonApi(season.id)
+      setSeasons((prev) =>
+        prev.map((item) => {
+          if (item.id !== season.id) {
+            return item
+          }
+          return {
+            ...item,
+            joined: true,
+            participants: result.isNewJoin ? item.participants + 1 : item.participants,
+          }
+        }),
+      )
+
       if (result.isNewJoin) {
         message.success(`已加入 ${season.name}`)
       } else {
         message.info(`你已加入过 ${season.name}`)
       }
-      setCurrentSeason(result.season.id)
+
+      setCurrentSeason(season.id)
+      setCurrentAccount(result.accountId)
       navigate('/trading')
     } catch (error) {
-      const text = error instanceof Error ? error.message : '加入赛季失败'
-      message.error(text)
+      if (shouldFallbackToMockSeason(error)) {
+        try {
+          const fallback = await joinMockSeason({ seasonId: season.id, userId: currentUser.id })
+          setSeasons((prev) => prev.map((item) => (item.id === season.id ? fallback.season : item)))
+          setCurrentSeason(fallback.season.id)
+          setCurrentAccount(null)
+          message.warning('后端加入赛季接口暂不可用，已切换为 mock 加入模式')
+          navigate('/trading')
+          return
+        } catch (fallbackError) {
+          const fallbackText =
+            fallbackError instanceof Error ? fallbackError.message : '加入赛季失败'
+          message.error(fallbackText)
+          return
+        }
+      }
+
+      message.error(extractSeasonApiErrorMessage(error, '加入赛季失败'))
     } finally {
       setJoiningSeasonId(null)
     }

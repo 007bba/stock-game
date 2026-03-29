@@ -85,6 +85,14 @@ class TestTradingService(unittest.TestCase):
         self.assertIn("createdAt", result)
         self.assertIsInstance(result["createdAt"], str)
 
+    def test_join_season_creates_account_and_is_idempotent(self):
+        first = self.svc.join_season(season_id=1, user_id="new-user")
+        self.assertTrue(first["isNewJoin"])
+
+        second = self.svc.join_season(season_id=1, user_id="new-user")
+        self.assertFalse(second["isNewJoin"])
+        self.assertEqual(first["accountId"], second["accountId"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -59,6 +59,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/Season'
 
+  /v1/seasons/{seasonId}/join:
+    post:
+      tags: [Seasons]
+      summary: Join season and bind trading account (idempotent)
+      parameters:
+        - $ref: '#/components/parameters/SeasonId'
+      responses:
+        '200':
+          description: Join result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinSeasonResponse'
+        '404':
+          description: Season not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v1/seasons/{seasonId}/clock:
     get:
       tags: [Seasons]
@@ -144,11 +164,6 @@ paths:
       parameters:
         - $ref: '#/components/parameters/SeasonId'
         - in: query
-          name: userId
-          required: true
-          schema:
-            type: string
-        - in: query
           name: status
           schema:
             $ref: '#/components/schemas/OrderStatus'
@@ -178,11 +193,6 @@ paths:
           schema:
             type: integer
             format: int64
-        - in: query
-          name: userId
-          required: true
-          schema:
-            type: string
       responses:
         '200':
           description: Canceled
@@ -403,13 +413,11 @@ components:
 
     PlaceOrderRequest:
       type: object
-      required: [clientOrderId, userId, accountId, tsCode, side, limitPrice, quantity]
+      required: [clientOrderId, accountId, tsCode, side, limitPrice, quantity]
       properties:
         clientOrderId:
           type: string
           maxLength: 64
-        userId:
-          type: string
         accountId:
           type: integer
           format: int64
@@ -424,6 +432,27 @@ components:
           type: integer
           minimum: 100
           description: Must be multiples of 100
+
+    JoinSeasonResponse:
+      type: object
+      required: [seasonId, accountId, isNewJoin, initialCash, availableCash, frozenCash, realizedPnl]
+      properties:
+        seasonId:
+          type: integer
+          format: int64
+        accountId:
+          type: integer
+          format: int64
+        isNewJoin:
+          type: boolean
+        initialCash:
+          type: number
+        availableCash:
+          type: number
+        frozenCash:
+          type: number
+        realizedPnl:
+          type: number
 
     Order:
       type: object
@@ -576,6 +605,10 @@ components:
         - INSUFFICIENT_CASH
         - ORDER_NOT_FOUND
         - ORDER_NOT_CANCELABLE
+        - ACCOUNT_NOT_FOUND
+        - PERMISSION_DENIED
+        - SEASON_NOT_FOUND
+        - JOIN_SEASON_FAILED
 
 x-websocket:
   endpoint: wss://api.stock-game.internal/v1/ws?seasonId={seasonId}&token={token}
