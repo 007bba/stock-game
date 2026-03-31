@@ -33,6 +33,20 @@ PowerShell convenience (auto-load `.env` in current session):
 - `validate`: run database quality checks for a season (`market_ticks` + `market_tick_quotes`)
 - `all`: run all steps in order, including `validate`
 
+## One-Click Fixture Seed (No Tushare)
+
+Generate deterministic replay data directly in DB for a season (useful when external data source is unavailable):
+
+```bash
+python scripts/etl/seed_replay_fixture.py --season-id 39 --overwrite
+```
+
+Custom game days / seed:
+
+```bash
+python scripts/etl/seed_replay_fixture.py --season-id 39 --game-days 10 --seed 20260330 --overwrite
+```
+
 ## Validation
 
 Local timeline check:

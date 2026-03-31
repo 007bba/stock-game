@@ -30,6 +30,7 @@ REJECT_CODES = {
     "INSUFFICIENT_CASH",
     "ORDER_NOT_FOUND",
     "ORDER_NOT_CANCELABLE",
+    "AUCTION_CANCEL_BLOCKED",
     "ACCOUNT_NOT_FOUND",
     "PERMISSION_DENIED",
 }
@@ -110,6 +111,7 @@ class TestOrderApi(unittest.TestCase):
         )
         self.client = TestClient(app)
         self.buyer_headers = {"Authorization": f"Bearer {make_test_token('buyer')}"}
+        self.seller_headers = {"Authorization": f"Bearer {make_test_token('seller')}"}
 
     def tearDown(self):
         os.environ.pop("SUPABASE_USE_JWKS", None)
@@ -243,6 +245,21 @@ class TestOrderApi(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIsInstance(resp.json(), list)
 
+    def test_get_account_snapshot_returns_cash_and_positions(self):
+        resp = self.client.get("/v1/seasons/1/account", headers=self.seller_headers)
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["accountId"], 2)
+        self.assertEqual(body["availableCash"], 1000000)
+        self.assertEqual(len(body["positions"]), 1)
+        self.assertEqual(body["positions"][0]["tsCode"], "600000.SH")
+
+    def test_get_account_snapshot_returns_404_for_missing_account(self):
+        headers = {"Authorization": f"Bearer {make_test_token('ghost')}"}
+        resp = self.client.get("/v1/seasons/1/account", headers=headers)
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.json()["code"], "ACCOUNT_NOT_FOUND")
+
     def test_cancel_order_returns_200_and_status_canceled(self):
         place_resp = self.client.post(
             "/v1/seasons/1/orders",
@@ -275,6 +292,33 @@ class TestOrderApi(unittest.TestCase):
         body = cancel_resp.json()
         self.assertEqual(body["code"], "ORDER_NOT_FOUND")
         self.assertIn(body["code"], REJECT_CODES)
+
+    def test_cancel_order_blocked_during_auction_window(self):
+        place_resp = self.client.post(
+            "/v1/seasons/1/orders",
+            json={
+                "clientOrderId": "api-cancel-auction-1",
+                "accountId": 1,
+                "tsCode": "600000.SH",
+                "side": "buy",
+                "limitPrice": 10.0,
+                "quantity": 100,
+            },
+            headers=self.buyer_headers,
+        )
+        self.assertEqual(place_resp.status_code, 201)
+        order_id = place_resp.json()["id"]
+
+        self.tick.phase = "open_auction"
+        self.tick.minute_of_day = 2
+
+        cancel_resp = self.client.post(
+            f"/v1/seasons/1/orders/{order_id}/cancel",
+            headers=self.buyer_headers,
+        )
+        self.assertEqual(cancel_resp.status_code, 400)
+        body = cancel_resp.json()
+        self.assertEqual(body["code"], "AUCTION_CANCEL_BLOCKED")
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ const statusColor: Record<OrderStatus, string> = {
 }
 
 const columns = [
-  { title: '订单号', dataIndex: 'orderId', key: 'orderId' },
+  { title: '记录号', dataIndex: 'orderId', key: 'orderId' },
   { title: '股票', dataIndex: 'tsCode', key: 'tsCode' },
   { title: '方向', dataIndex: 'side', key: 'side' },
   { title: '数量', dataIndex: 'qty', key: 'qty' },
@@ -46,7 +46,7 @@ const columns = [
 
 function OrderList({ orders }: OrderListProps) {
   return (
-    <Card title="委托 / 成交列表">
+    <Card title="操作记录">
       <Table
         rowKey="orderId"
         size="small"

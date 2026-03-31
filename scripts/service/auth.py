@@ -147,6 +147,16 @@ def _resolve_expected_issuer() -> str | None:
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> AuthContext:
+    # 开发模式：允许跳过认证（使用有效的 UUID）
+    dev_mode = os.getenv("DEV_SKIP_AUTH", "").lower() in ("true", "1", "yes")
+    if dev_mode:
+        # 使用固定 UUID（开发测试用）
+        return AuthContext(
+            user_id="00000000-0000-0000-0000-000000000001",
+            email="dev@test.com",
+            claims={"role": "authenticated"}
+        )
+
     if credentials is None or not credentials.credentials:
         raise _unauthorized("Missing bearer token")
 
@@ -154,6 +164,16 @@ def get_current_user(
 
 
 def get_current_user_ws(token: str | None) -> AuthContext | None:
+    # 开发模式：允许跳过认证（使用有效的 UUID）
+    dev_mode = os.getenv("DEV_SKIP_AUTH", "").lower() in ("true", "1", "yes")
+    if dev_mode:
+        # 使用固定 UUID（开发测试用）
+        return AuthContext(
+            user_id="00000000-0000-0000-0000-000000000001",
+            email="dev@test.com",
+            claims={"role": "authenticated"}
+        )
+    
     if token is None or not token.strip():
         return None
 

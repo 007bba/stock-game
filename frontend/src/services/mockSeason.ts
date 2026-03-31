@@ -20,7 +20,21 @@ export interface LobbySeason extends MockSeason {
 const SEASONS_KEY = 'stock-game:mock-seasons'
 const JOIN_MAP_KEY = 'stock-game:mock-season-joins'
 
+const DEFAULT_DEMO_SEASON: MockSeason = {
+  id: 43,
+  name: 'S43 干净 Demo 训练赛季',
+  status: '进行中',
+  participants: 1,
+  stockCount: 24,
+  initialCash: 1000000,
+  createdBy: 'System',
+  createdAt: '2026-03-31T08:00:00.000Z',
+  startDate: '2026-03-31',
+  endDate: '2026-04-30',
+}
+
 const defaultSeasons: MockSeason[] = [
+  DEFAULT_DEMO_SEASON,
   {
     id: 1,
     name: 'S1 春季赛',
@@ -59,6 +73,18 @@ const defaultSeasons: MockSeason[] = [
   },
 ]
 
+function normalizeSeasons(seasons: MockSeason[]): MockSeason[] {
+  const withoutLegacyDemo = seasons.filter(
+    (season) => !(season.id === 39 && season.createdBy === 'System' && season.name === 'S39 AI龙头训练赛季'),
+  )
+
+  if (withoutLegacyDemo.some((season) => season.id === DEFAULT_DEMO_SEASON.id)) {
+    return withoutLegacyDemo
+  }
+
+  return [DEFAULT_DEMO_SEASON, ...withoutLegacyDemo]
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
@@ -92,7 +118,9 @@ function writeJson<T>(key: string, value: T): void {
 function readSeasons(): MockSeason[] {
   const seasons = readJson<MockSeason[]>(SEASONS_KEY, [])
   if (seasons.length > 0) {
-    return seasons
+    const normalized = normalizeSeasons(seasons)
+    writeJson(SEASONS_KEY, normalized)
+    return normalized
   }
   writeJson(SEASONS_KEY, defaultSeasons)
   return defaultSeasons

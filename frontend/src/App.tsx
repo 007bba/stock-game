@@ -4,19 +4,23 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 
 const menuItems: MenuProps['items'] = [
+  { key: '/', label: '首页' },
+  { key: '/train', label: '训练' },
+  { key: '/review', label: '复盘' },
   { key: '/login', label: '登录' },
-  { key: '/lobby', label: '赛季大厅' },
-  { key: '/trading', label: '交易界面' },
 ]
 
 function getSelectedMenuKey(pathname: string): string {
-  if (pathname.startsWith('/trading')) {
-    return '/trading'
+  if (pathname.startsWith('/train') || pathname.startsWith('/trading')) {
+    return '/train'
+  }
+  if (pathname.startsWith('/review')) {
+    return '/review'
   }
   if (pathname.startsWith('/login')) {
     return '/login'
   }
-  return '/lobby'
+  return '/'
 }
 
 function App() {
@@ -30,7 +34,7 @@ function App() {
           <Typography.Text strong className="app-title">
             Stock Game
           </Typography.Text>
-          <Tag color="gold">P9</Tag>
+          <Tag color="gold">v2</Tag>
         </Space>
         <Menu
           mode="horizontal"

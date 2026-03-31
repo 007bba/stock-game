@@ -37,6 +37,39 @@ export interface ApiOrder {
   updatedAt?: string | null
 }
 
+export interface ReplayQuoteSnapshot {
+  tsCode: string
+  refPrice: number
+  openPrice: number | null
+  highPrice: number | null
+  lowPrice: number | null
+  closePrice: number | null
+  vwapPrice: number | null
+  volume: number
+  upperLimitPrice: number
+  lowerLimitPrice: number
+  isHalted: boolean
+  pctChange: number
+  isLimitUp: boolean
+  isLimitDown: boolean
+  auctionImbalanceRatio?: number | null
+  auctionHintLevel?: number
+}
+
+export interface CurrentTickSnapshot {
+  tickId: number
+  seasonId: number
+  gameDayNo: number
+  minuteOfDay: number
+  phase: string
+  matchingMode: string
+  isTradable: boolean
+  isMatchingPoint: boolean
+  nextTickId?: number | null
+  nextTickAt?: string | null
+  quotes: ReplayQuoteSnapshot[]
+}
+
 interface PlaceOrderRequest {
   clientOrderId: string
   accountId: number
@@ -115,6 +148,14 @@ export async function listOrdersApi(params: {
     ? `/v1/seasons/${params.seasonId}/orders?${query}`
     : `/v1/seasons/${params.seasonId}/orders`
   return api.get<ApiOrder[]>(path)
+}
+
+export async function getCurrentTickSnapshotApi(seasonId: number): Promise<CurrentTickSnapshot> {
+  return api.get<CurrentTickSnapshot>(`/v1/seasons/${seasonId}/ticks/current`)
+}
+
+export async function advanceTickApi(seasonId: number): Promise<void> {
+  return api.post(`/v1/seasons/${seasonId}/ticks/advance`)
 }
 
 export function extractApiErrorMessage(error: unknown, fallback: string): string {

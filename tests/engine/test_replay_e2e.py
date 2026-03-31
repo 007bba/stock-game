@@ -240,6 +240,92 @@ class TestReplayE2E(unittest.TestCase):
         self.assertEqual(order.status, "rejected")
         self.assertEqual(order.reject_code, "STOCK_HALTED")
 
+    def test_open_call_auction_uses_max_executable_volume_price(self):
+        place_tick = Tick(
+            id=40,
+            season_id=1,
+            game_day_no=1,
+            minute_of_day=2,
+            phase="open_auction",
+            matching_mode="accept_only",
+            is_tradable=True,
+            is_matching_point=False,
+        )
+        quote = self._quote()
+
+        self.orch.place_order(
+            tick=place_tick,
+            quote=quote,
+            req=PlaceOrderRequest(
+                season_id=1,
+                user_id=self.buyer,
+                account_id=1,
+                client_order_id="call-buy-a",
+                ts_code=self.ts_code,
+                side="buy",
+                limit_price=10.2,
+                quantity=100,
+            ),
+        )
+        self.orch.place_order(
+            tick=place_tick,
+            quote=quote,
+            req=PlaceOrderRequest(
+                season_id=1,
+                user_id=self.buyer,
+                account_id=1,
+                client_order_id="call-buy-b",
+                ts_code=self.ts_code,
+                side="buy",
+                limit_price=10.0,
+                quantity=100,
+            ),
+        )
+        self.orch.place_order(
+            tick=place_tick,
+            quote=quote,
+            req=PlaceOrderRequest(
+                season_id=1,
+                user_id=self.seller,
+                account_id=2,
+                client_order_id="call-sell-a",
+                ts_code=self.ts_code,
+                side="sell",
+                limit_price=9.8,
+                quantity=100,
+            ),
+        )
+        self.orch.place_order(
+            tick=place_tick,
+            quote=quote,
+            req=PlaceOrderRequest(
+                season_id=1,
+                user_id=self.seller,
+                account_id=2,
+                client_order_id="call-sell-b",
+                ts_code=self.ts_code,
+                side="sell",
+                limit_price=10.1,
+                quantity=100,
+            ),
+        )
+
+        match_tick = Tick(
+            id=41,
+            season_id=1,
+            game_day_no=1,
+            minute_of_day=3,
+            phase="open_auction",
+            matching_mode="open_call_auction",
+            is_tradable=True,
+            is_matching_point=True,
+        )
+        self.orch.process_tick(match_tick, {self.ts_code: quote})
+
+        self.assertEqual(len(self.state.trades), 1)
+        self.assertEqual(sum(trade.quantity for trade in self.state.trades), 100)
+        self.assertTrue(all(trade.trade_price == 10.0 for trade in self.state.trades))
+
 
 if __name__ == "__main__":
     unittest.main()

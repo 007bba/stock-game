@@ -1,0 +1,242 @@
+[
+  {
+    "ts_code": "000547.SZ",
+    "name": "航天发展",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 111923347719.13045,
+    "total_return": 122.14,
+    "score": 241.0699865410498
+  },
+  {
+    "ts_code": "002792.SZ",
+    "name": "通宇通讯",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 39054019082.608696,
+    "total_return": 63.23,
+    "score": 211.6131498470948
+  },
+  {
+    "ts_code": "688125.SH",
+    "name": "安达智能",
+    "industry": "专用机械",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 1515516938.6956522,
+    "total_return": 80.14,
+    "score": 205.22453046472097
+  },
+  {
+    "ts_code": "002413.SZ",
+    "name": "雷科防务",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 37184312889.56522,
+    "total_return": 48.87,
+    "score": 204.43653618030842
+  },
+  {
+    "ts_code": "601869.SH",
+    "name": "长飞光纤",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 20665472603.91304,
+    "total_return": 35.98,
+    "score": 197.99111838261072
+  },
+  {
+    "ts_code": "300377.SZ",
+    "name": "赢时胜",
+    "industry": "软件服务",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 23892065289.13043,
+    "total_return": 34.23,
+    "score": 197.11309523809524
+  },
+  {
+    "ts_code": "600345.SH",
+    "name": "长江通信",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 6736045350.0,
+    "total_return": 32.29,
+    "score": 196.14503816793894
+  },
+  {
+    "ts_code": "600271.SH",
+    "name": "航天信息",
+    "industry": "软件服务",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 11307858530.869566,
+    "total_return": 30.32,
+    "score": 195.16164994425864
+  },
+  {
+    "ts_code": "300710.SZ",
+    "name": "万隆光电",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 4764438567.692307,
+    "total_return": 17.19,
+    "score": 188.5966892400301
+  },
+  {
+    "ts_code": "688205.SH",
+    "name": "德科立",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 24072007664.782608,
+    "total_return": 10.35,
+    "score": 185.17739605073047
+  },
+  {
+    "ts_code": "600734.SH",
+    "name": "实达集团",
+    "industry": "软件服务",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 27451012940.43478,
+    "total_return": -17.71,
+    "score": 180.0
+  },
+  {
+    "ts_code": "002977.SZ",
+    "name": "天箭科技",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 4480621702.608696,
+    "total_return": -10.18,
+    "score": 180.0
+  },
+  {
+    "ts_code": "001266.SZ",
+    "name": "宏英智能",
+    "industry": "电器仪表",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 1054760500.8695651,
+    "total_return": 23.42,
+    "score": 172.25606895853892
+  },
+  {
+    "ts_code": "003007.SZ",
+    "name": "直真科技",
+    "industry": "软件服务",
+    "has_limit_up": true,
+    "has_consecutive_limit": true,
+    "avg_amount": 1199082052.1739135,
+    "total_return": 2.42,
+    "score": 163.19927973624064
+  },
+  {
+    "ts_code": "688387.SH",
+    "name": "信科移动-U",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 14551927060.869566,
+    "total_return": 81.69,
+    "score": 120.84507042253522
+  },
+  {
+    "ts_code": "688031.SH",
+    "name": "星环科技-U",
+    "industry": "软件服务",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 9771030330.434786,
+    "total_return": 64.62,
+    "score": 112.31132075471697
+  },
+  {
+    "ts_code": "600105.SH",
+    "name": "永鼎股份",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 46542265337.3913,
+    "total_return": 56.0,
+    "score": 107.99875699192046
+  },
+  {
+    "ts_code": "300762.SZ",
+    "name": "上海瀚讯",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 42842010303.04348,
+    "total_return": 49.66,
+    "score": 104.8294434470377
+  },
+  {
+    "ts_code": "002151.SZ",
+    "name": "北斗星通",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 16258063647.826084,
+    "total_return": 45.24,
+    "score": 102.61828644501279
+  },
+  {
+    "ts_code": "688418.SH",
+    "name": "震有科技",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 6707042892.608697,
+    "total_return": 42.65,
+    "score": 101.3254593175853
+  },
+  {
+    "ts_code": "688682.SH",
+    "name": "霍莱沃",
+    "industry": "软件服务",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 3074232885.217392,
+    "total_return": 41.28,
+    "score": 100.64085447263017
+  },
+  {
+    "ts_code": "002796.SZ",
+    "name": "世嘉科技",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 5945603629.565218,
+    "total_return": 38.44,
+    "score": 99.22116824762855
+  },
+  {
+    "ts_code": "301205.SZ",
+    "name": "联特科技",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 21130574586.086956,
+    "total_return": 37.02,
+    "score": 98.51114002276793
+  },
+  {
+    "ts_code": "600498.SH",
+    "name": "烽火通信",
+    "industry": "通信设备",
+    "has_limit_up": true,
+    "has_consecutive_limit": false,
+    "avg_amount": 27884533666.956524,
+    "total_return": 35.13,
+    "score": 97.56529064869419
+  }
+]

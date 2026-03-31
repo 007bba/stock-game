@@ -17,4 +17,4 @@ COPY db/ db/
 
 EXPOSE 8000
 
-CMD ["uvicorn", "scripts.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "python scripts/apply_schema.py && uvicorn scripts.main:app --host 0.0.0.0 --port 8000"]

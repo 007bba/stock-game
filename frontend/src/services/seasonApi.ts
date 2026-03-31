@@ -10,8 +10,28 @@ export interface JoinSeasonResponse {
   realizedPnl: number
 }
 
+export interface SeasonPositionSnapshot {
+  tsCode: string
+  qty: number
+  avgPrice: number
+}
+
+export interface SeasonAccountSnapshot {
+  seasonId: number
+  accountId: number
+  initialCash: number
+  availableCash: number
+  frozenCash: number
+  realizedPnl: number
+  positions: SeasonPositionSnapshot[]
+}
+
 export async function joinSeasonApi(seasonId: number): Promise<JoinSeasonResponse> {
   return api.post<JoinSeasonResponse>(`/v1/seasons/${seasonId}/join`)
+}
+
+export async function getSeasonAccountApi(seasonId: number): Promise<SeasonAccountSnapshot> {
+  return api.get<SeasonAccountSnapshot>(`/v1/seasons/${seasonId}/account`)
 }
 
 export function shouldFallbackToMockSeason(error: unknown): boolean {

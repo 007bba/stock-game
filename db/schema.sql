@@ -33,6 +33,12 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'etl_job_status') THEN
     CREATE TYPE etl_job_status AS ENUM ('pending', 'running', 'succeeded', 'failed', 'canceled');
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'market_session_status') THEN
+    CREATE TYPE market_session_status AS ENUM ('created', 'running', 'finished', 'archived');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'market_trade_side') THEN
+    CREATE TYPE market_trade_side AS ENUM ('buy', 'sell');
+  END IF;
 END
 $$;
 
@@ -306,6 +312,73 @@ CREATE INDEX IF NOT EXISTS idx_ledger_account_time ON cash_ledger(account_id, cr
 CREATE INDEX IF NOT EXISTS idx_snapshot_season_score ON daily_account_snapshots(season_id, score DESC);
 CREATE INDEX IF NOT EXISTS idx_leaderboard_rank ON season_leaderboard(season_id, rank_no);
 
+CREATE TABLE IF NOT EXISTS market_sessions (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  season_id BIGINT NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
+  ts_code VARCHAR(16) NOT NULL,
+  initial_cash NUMERIC(18, 2) NOT NULL CHECK (initial_cash > 0),
+  current_cash NUMERIC(18, 2) NOT NULL CHECK (current_cash >= 0),
+  current_step_no INT NOT NULL DEFAULT 1 CHECK (current_step_no > 0),
+  status market_session_status NOT NULL DEFAULT 'created',
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS market_session_positions (
+  session_id BIGINT NOT NULL REFERENCES market_sessions(id) ON DELETE CASCADE,
+  ts_code VARCHAR(16) NOT NULL,
+  qty_total BIGINT NOT NULL DEFAULT 0 CHECK (qty_total >= 0 AND (qty_total % 100) = 0),
+  avg_cost NUMERIC(18, 4) NOT NULL DEFAULT 0 CHECK (avg_cost >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (session_id, ts_code)
+);
+
+CREATE TABLE IF NOT EXISTS market_session_trades (
+  id BIGSERIAL PRIMARY KEY,
+  session_id BIGINT NOT NULL REFERENCES market_sessions(id) ON DELETE CASCADE,
+  tick_id BIGINT NOT NULL REFERENCES market_ticks(id) ON DELETE RESTRICT,
+  step_no INT NOT NULL CHECK (step_no > 0),
+  ts_code VARCHAR(16) NOT NULL,
+  side market_trade_side NOT NULL,
+  price NUMERIC(18, 4) NOT NULL CHECK (price > 0),
+  quantity BIGINT NOT NULL CHECK (quantity > 0 AND (quantity % 100) = 0),
+  cash_after NUMERIC(18, 2) NOT NULL CHECK (cash_after >= 0),
+  position_after BIGINT NOT NULL CHECK (position_after >= 0 AND (position_after % 100) = 0),
+  avg_cost_basis NUMERIC(18, 4) NOT NULL DEFAULT 0 CHECK (avg_cost_basis >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS market_session_trade_notes (
+  id BIGSERIAL PRIMARY KEY,
+  trade_id BIGINT NOT NULL UNIQUE REFERENCES market_session_trades(id) ON DELETE CASCADE,
+  session_id BIGINT NOT NULL REFERENCES market_sessions(id) ON DELETE CASCADE,
+  note TEXT NOT NULL,
+  tag VARCHAR(64),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS market_session_results (
+  session_id BIGINT PRIMARY KEY REFERENCES market_sessions(id) ON DELETE CASCADE,
+  final_step_no INT NOT NULL CHECK (final_step_no > 0),
+  final_price NUMERIC(18, 4) NOT NULL CHECK (final_price > 0),
+  final_cash NUMERIC(18, 2) NOT NULL CHECK (final_cash >= 0),
+  final_position_qty BIGINT NOT NULL CHECK (final_position_qty >= 0 AND (final_position_qty % 100) = 0),
+  final_assets NUMERIC(18, 2) NOT NULL CHECK (final_assets >= 0),
+  total_return_pct NUMERIC(18, 4) NOT NULL,
+  trade_count INT NOT NULL DEFAULT 0 CHECK (trade_count >= 0),
+  win_rate NUMERIC(18, 4),
+  summary TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_market_sessions_user_created ON market_sessions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_market_sessions_season_symbol ON market_sessions(season_id, ts_code);
+CREATE INDEX IF NOT EXISTS idx_market_session_trades_session_step ON market_session_trades(session_id, step_no);
+CREATE INDEX IF NOT EXISTS idx_market_session_trade_notes_session ON market_session_trade_notes(session_id);
+
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -334,5 +407,15 @@ DROP TRIGGER IF EXISTS trg_orders_updated_at ON orders;
 CREATE TRIGGER trg_orders_updated_at BEFORE UPDATE ON orders
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_market_sessions_updated_at ON market_sessions;
+CREATE TRIGGER trg_market_sessions_updated_at BEFORE UPDATE ON market_sessions
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_market_session_positions_updated_at ON market_session_positions;
+CREATE TRIGGER trg_market_session_positions_updated_at BEFORE UPDATE ON market_session_positions
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 COMMIT;
+
+
 

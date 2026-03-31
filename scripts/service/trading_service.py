@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
@@ -52,6 +53,8 @@ class TradingService:
                 "minuteOfDay": tick.minute_of_day,
                 "phase": tick.phase,
                 "matchingMode": tick.matching_mode,
+                "isTradable": tick.is_tradable,
+                "isMatchingPoint": tick.is_matching_point,
                 "tradeCount": len(trade_ids),
             },
         )
@@ -143,6 +146,10 @@ class TradingService:
             )
 
     def list_orders(self, season_id: int, user_id: str, status: str | None = None, ts_code: str | None = None) -> list[dict]:
+        db_orders = self._list_orders_from_db(season_id=season_id, user_id=user_id, status=status, ts_code=ts_code)
+        if db_orders is not None:
+            return db_orders
+
         result: list[dict] = []
         for order in self.state.orders.values():
             if order.season_id != season_id or order.user_id != user_id:
@@ -155,7 +162,43 @@ class TradingService:
         result.sort(key=lambda item: item["id"])
         return result
 
-    def join_season(self, season_id: int, user_id: str, initial_cash: float = 1_000_000.0) -> dict:
+    def get_account_snapshot(self, season_id: int, user_id: str) -> dict | None:
+        snapshot = self._get_account_snapshot_from_db(season_id=season_id, user_id=user_id)
+        if snapshot is not None:
+            return snapshot
+
+        account = self._find_account_in_state(season_id=season_id, user_id=user_id)
+        if account is None:
+            return None
+
+        positions = [
+            {
+                "tsCode": position.ts_code,
+                "qty": position.qty_total,
+                "avgPrice": position.avg_cost,
+            }
+            for (position_season_id, position_user_id, _), position in self.state.positions.items()
+            if position_season_id == season_id and str(position_user_id) == user_id and position.qty_total > 0
+        ]
+        positions.sort(key=lambda item: item["tsCode"])
+
+        return {
+            "seasonId": account.season_id,
+            "accountId": account.id,
+            "initialCash": account.initial_cash,
+            "availableCash": account.available_cash,
+            "frozenCash": account.frozen_cash,
+            "realizedPnl": account.realized_pnl,
+            "positions": positions,
+        }
+
+    def join_season(
+        self,
+        season_id: int,
+        user_id: str,
+        initial_cash: float = 1_000_000.0,
+        email: str | None = None,
+    ) -> dict:
         existing = self._find_account_in_state(season_id=season_id, user_id=user_id)
         if existing is not None:
             return self._account_to_join_dto(existing, is_new_join=False)
@@ -172,6 +215,7 @@ class TradingService:
                 if not self._season_exists_in_db(season_id=season_id):
                     raise ValueError("SEASON_NOT_FOUND")
 
+                self._ensure_user_exists(user_id=user_id, email=email)
                 account_id = self._allocate_account_id()
                 account = Account(
                     id=account_id,
@@ -191,6 +235,116 @@ class TradingService:
 
         return self._account_to_join_dto(account, is_new_join=is_new_join)
 
+    def _list_orders_from_db(
+        self,
+        season_id: int,
+        user_id: str,
+        status: str | None = None,
+        ts_code: str | None = None,
+    ) -> list[dict] | None:
+        query = [
+            """
+            SELECT
+              id,
+              client_order_id,
+              ts_code,
+              side,
+              limit_price,
+              quantity,
+              remaining_qty,
+              status,
+              reject_code,
+              reject_reason,
+              created_at,
+              updated_at
+            FROM orders
+            WHERE season_id = %s
+              AND user_id = %s
+            """
+        ]
+        params: list[Any] = [season_id, user_id]
+
+        if status:
+            query.append("AND status = %s")
+            params.append(status)
+        if ts_code:
+            query.append("AND ts_code = %s")
+            params.append(ts_code)
+
+        query.append("ORDER BY id ASC")
+
+        with self._db_cursor() as cur:
+            if cur is None:
+                return None
+            cur.execute("\n".join(query), tuple(params))
+            rows = cur.fetchall()
+
+        return [
+            {
+                "id": int(row[0]),
+                "clientOrderId": str(row[1]),
+                "tsCode": str(row[2]),
+                "side": str(row[3]),
+                "limitPrice": float(row[4]),
+                "quantity": int(row[5]),
+                "remainingQty": int(row[6]),
+                "status": str(row[7]),
+                "rejectCode": row[8],
+                "rejectReason": row[9],
+                "createdAt": row[10].isoformat() if row[10] else None,
+                "updatedAt": row[11].isoformat() if row[11] else None,
+            }
+            for row in rows
+        ]
+
+    def _get_account_snapshot_from_db(self, season_id: int, user_id: str) -> dict | None:
+        with self._db_cursor() as cur:
+            if cur is None:
+                return None
+            cur.execute(
+                """
+                SELECT id, season_id, initial_cash, available_cash, frozen_cash, realized_pnl
+                FROM accounts
+                WHERE season_id = %s AND user_id = %s
+                LIMIT 1
+                """,
+                (season_id, user_id),
+            )
+            account_row = cur.fetchone()
+
+            if account_row is None:
+                return None
+
+            cur.execute(
+                """
+                SELECT ts_code, qty_total, avg_cost
+                FROM positions
+                WHERE season_id = %s
+                  AND user_id = %s
+                  AND qty_total > 0
+                ORDER BY ts_code
+                """,
+                (season_id, user_id),
+            )
+            position_rows = cur.fetchall()
+
+        return {
+            "seasonId": int(account_row[1]),
+            "accountId": int(account_row[0]),
+            "initialCash": float(account_row[2]),
+            "availableCash": float(account_row[3]),
+            "frozenCash": float(account_row[4]),
+            "realizedPnl": float(account_row[5]),
+            "positions": [
+                {
+                    "tsCode": str(row[0]),
+                    "qty": int(row[1]),
+                    "avgPrice": float(row[2]),
+                }
+                for row in position_rows
+            ],
+        }
+
     def _find_account_in_state(self, season_id: int, user_id: str) -> Account | None:
         for account in self.state.accounts.values():
             if account.season_id == season_id and str(account.user_id) == user_id:
@@ -200,12 +354,33 @@ class TradingService:
     def _get_state_db_conn(self) -> Any | None:
         return getattr(self.state, "_conn", None)
 
-    def _find_account_in_db(self, season_id: int, user_id: str) -> Account | None:
+    @contextmanager
+    def _db_cursor(self):
         conn = self._get_state_db_conn()
-        if conn is None:
-            return None
+        if conn is not None:
+            with conn.cursor() as cur:
+                yield cur
+            return
 
-        with conn.cursor() as cur:
+        database_url = getattr(self.state, "_database_url", None)
+        if not database_url:
+            yield None
+            return
+
+        import psycopg2
+
+        temp_conn = psycopg2.connect(database_url)
+        try:
+            with temp_conn.cursor() as cur:
+                yield cur
+        finally:
+            temp_conn.close()
+
+    def _find_account_in_db(self, season_id: int, user_id: str) -> Account | None:
+        with self._db_cursor() as cur:
+            if cur is None:
+                return None
+
             cur.execute(
                 """
                 SELECT id, season_id, user_id, initial_cash, available_cash, frozen_cash, realized_pnl
@@ -231,25 +406,23 @@ class TradingService:
         )
 
     def _season_exists_in_db(self, season_id: int) -> bool:
-        conn = self._get_state_db_conn()
-        if conn is None:
-            return True
+        with self._db_cursor() as cur:
+            if cur is None:
+                return True
 
-        with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM seasons WHERE id = %s LIMIT 1", (season_id,))
             return cur.fetchone() is not None
 
     def _allocate_account_id(self) -> int:
-        conn = self._get_state_db_conn()
-        if conn is not None:
-            with conn.cursor() as cur:
-                cur.execute("SELECT nextval('accounts_id_seq')")
-                value = cur.fetchone()
+        with self._db_cursor() as cur:
+            if cur is None:
+                return max(self.state.accounts.keys(), default=0) + 1
+
+            cur.execute("SELECT nextval('accounts_id_seq')")
+            value = cur.fetchone()
             if value is None:
                 raise RuntimeError("failed to allocate account id")
             return int(value[0])
-
-        return max(self.state.accounts.keys(), default=0) + 1
 
     def _account_to_join_dto(self, account: Account, *, is_new_join: bool) -> dict:
         return {
@@ -261,6 +434,43 @@ class TradingService:
             "frozenCash": account.frozen_cash,
             "realizedPnl": account.realized_pnl,
         }
+
+    def _ensure_user_exists(self, user_id: str, email: str | None) -> None:
+        with self._db_cursor() as cur:
+            if cur is None:
+                return
+
+            login_name = self._build_login_name(user_id=user_id, email=email)
+            display_name = self._build_display_name(user_id=user_id, email=email)
+
+            cur.execute(
+                """
+                INSERT INTO users (id, login_name, display_name)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                  login_name = EXCLUDED.login_name,
+                  display_name = EXCLUDED.display_name
+                """,
+                (user_id, login_name, display_name),
+            )
+
+    @staticmethod
+    def _build_login_name(user_id: str, email: str | None) -> str:
+        if email:
+            cleaned = email.strip().lower()
+            if cleaned:
+                return cleaned[:64]
+        return f"user-{user_id}"[:64]
+
+    @staticmethod
+    def _build_display_name(user_id: str, email: str | None) -> str:
+        if email:
+            cleaned = email.strip()
+            if cleaned:
+                local_name = cleaned.split("@", 1)[0].strip()
+                if local_name:
+                    return local_name[:64]
+        return f"player-{user_id[:8]}"[:64]
 
     def _order_to_dto(self, order: Order) -> dict:
         raw = asdict(order)

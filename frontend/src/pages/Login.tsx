@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { Alert, Button, Card, Checkbox, Form, Input, Space, Tabs, Typography, message } from 'antd'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { getTrainingPresetById } from '../services/trainingCatalog'
 import { useAuthStore } from '../stores/authStore'
+import { useTradingStore } from '../stores/tradingStore'
 
 interface AuthFormValues {
   email: string
@@ -13,7 +15,9 @@ interface AuthFormValues {
 
 function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [form] = Form.useForm<AuthFormValues>()
+  const startTrainingSession = useTradingStore((state) => state.startTrainingSession)
 
   const {
     mode,
@@ -36,6 +40,7 @@ function LoginPage() {
   )
 
   const isRegisterMode = mode === 'register'
+  const nextPresetId = searchParams.get('nextPreset')
 
   const onFinish = async (values: AuthFormValues) => {
     try {
@@ -62,7 +67,24 @@ function LoginPage() {
         message.success('登录成功')
       }
 
-      navigate('/lobby')
+      if (nextPresetId) {
+        const preset = getTrainingPresetById(nextPresetId)
+        if (preset) {
+          startTrainingSession({
+            presetId: preset.id,
+            title: preset.title,
+            focus: preset.focus,
+            description: preset.description,
+            symbolUniverse: preset.symbolUniverse,
+            defaultSymbol: preset.defaultSymbol,
+            dateRange: preset.dateRange,
+            startingCash: preset.startingCash,
+            datasetSeasonId: preset.seasonId,
+          })
+        }
+      }
+
+      navigate('/train')
     } catch {
       // 错误信息由 store 维护并展示在页面 Alert
     }
@@ -85,8 +107,29 @@ function LoginPage() {
             description={`邮箱：${currentUser.email}`}
           />
           <Space>
-            <Button type="primary" onClick={() => navigate('/lobby')}>
-              进入赛季大厅
+            <Button
+              type="primary"
+              onClick={() => {
+                if (nextPresetId) {
+                  const preset = getTrainingPresetById(nextPresetId)
+                  if (preset) {
+                    startTrainingSession({
+                      presetId: preset.id,
+                      title: preset.title,
+                      focus: preset.focus,
+                      description: preset.description,
+                      symbolUniverse: preset.symbolUniverse,
+                      defaultSymbol: preset.defaultSymbol,
+                      dateRange: preset.dateRange,
+                      startingCash: preset.startingCash,
+                      datasetSeasonId: preset.seasonId,
+                    })
+                  }
+                }
+                navigate('/train')
+              }}
+            >
+              进入训练页
             </Button>
             <Button
               onClick={async () => {
@@ -109,7 +152,7 @@ function LoginPage() {
   return (
     <Card title="登录 / 注册" style={{ maxWidth: 560, margin: '0 auto' }}>
       <Typography.Paragraph type="secondary">
-        当前为 Supabase Auth 认证流程，登录后可访问赛季大厅和交易界面。
+        当前为 Supabase Auth 认证流程，登录后可开始训练并保存复盘结果。
       </Typography.Paragraph>
 
       <Tabs activeKey={mode} items={modeItems} onChange={onModeChange} />

@@ -11,7 +11,11 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background: #f2f5f9;
-  color: #1f2937;
+  font-family: 'Avenir Next', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  background: #eef3fb;
+  color: #172033;
+}
+
+a {
+  color: inherit;
 }

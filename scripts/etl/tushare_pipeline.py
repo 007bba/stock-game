@@ -1062,40 +1062,48 @@ def compress_season(cfg: Config):
 
     with engine.begin() as conn:
         job_id = create_etl_job(conn, "season_compress", cfg.season_id, cfg.start_date, cfg.end_date)
-        try:
-            conn.execute(
-                text(
-                    """
-                    DELETE FROM market_tick_quotes
-                    WHERE season_id = :season_id
-                    """
-                ),
-                {"season_id": cfg.season_id},
-            )
-            conn.execute(
-                text(
-                    """
-                    DELETE FROM market_ticks
-                    WHERE season_id = :season_id
-                    """
-                ),
-                {"season_id": cfg.season_id},
-            )
 
-            row_count = 0
-            open_dates = list(iter_trade_dates(engine, cfg.exchange, cfg.start_date, cfg.end_date))
+    try:
+        row_count = 0
+        open_dates = list(iter_trade_dates(engine, cfg.exchange, cfg.start_date, cfg.end_date))
 
-            for game_day_no, cal_date in enumerate(open_dates, start=1):
+        # 检测已完成的交易日（支持断点续跑）
+        existing_days = set()
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT DISTINCT game_day_no FROM market_ticks WHERE season_id = :sid"),
+                {"sid": cfg.season_id},
+            ).fetchall()
+            existing_days = {int(r[0]) for r in rows}
+
+        if existing_days:
+            LOGGER.info("skipping already-compressed days: %s", sorted(existing_days))
+
+        pending_dates = [
+            (i, d) for i, d in enumerate(open_dates, start=1) if i not in existing_days
+        ]
+
+        if not pending_dates:
+            LOGGER.info("all days already compressed, nothing to do")
+            return
+
+        LOGGER.info("compressing %d remaining trading days for %d stocks", len(pending_dates), len(universe))
+
+        for game_day_no, cal_date in pending_dates:
+            LOGGER.info("day %d/%d: %s", game_day_no, len(open_dates), cal_date)
+
+            with engine.begin() as conn:
                 day_start = pd.Timestamp(f"{cal_date} 20:00:00+08:00")
                 tick_ids = build_market_ticks(conn, cfg.season_id, game_day_no, day_start)
                 halted_codes = load_halted_codes(conn, cal_date)
 
-                for ts_code in universe:
+            # 每个 stock 独立事务写入
+            for ts_code in universe:
+                with engine.connect() as conn:
                     day_df = load_day_bars(conn, ts_code, cal_date)
                     prev_close = load_prev_close(conn, ts_code, cal_date)
                     if prev_close is None:
                         if day_df.empty:
-                            LOGGER.warning("No bars and no prev close for %s on %s; skip", ts_code, cal_date)
                             continue
                         prev_close = float(day_df.iloc[0]["open_price"])
 
@@ -1144,14 +1152,18 @@ def compress_season(cfg: Config):
                         )
                         row_count += 1
 
+                    conn.commit()
+                pytime.sleep(0.2)  # 短暂间隔避免 Supabase 锁竞争
+
+        with engine.begin() as conn:
             finish_etl_job(conn, job_id, "succeeded", row_count=row_count)
-        except Exception as exc:  # pragma: no cover
-            try:
-                with engine.begin() as conn2:
-                    finish_etl_job(conn2, job_id, "failed", error_message=str(exc))
-            except Exception:
-                LOGGER.exception("failed to update etl_jobs status after exception")
-            raise
+    except Exception as exc:  # pragma: no cover
+        try:
+            with engine.begin() as conn2:
+                finish_etl_job(conn2, job_id, "failed", error_message=str(exc))
+        except Exception:
+            LOGGER.exception("failed to update etl_jobs status after exception")
+        raise
 
 def run_compression_validation(cfg: Config):
     script_path = os.path.join(os.path.dirname(__file__), "validate_compression.py")

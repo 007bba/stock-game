@@ -30,45 +30,90 @@ class SeasonScheduler:
         self._checkpoints: dict[str, int] = {}
         self._load_checkpoints()
 
-    def run_once(self, season_id: int) -> dict:
+    def get_checkpoint(self, season_id: int) -> int:
+        return int(self._checkpoints.get(str(season_id), 0))
+
+    @staticmethod
+    def _tick_to_dict(tick: Tick) -> dict:
+        return {
+            "tickId": tick.id,
+            "seasonId": tick.season_id,
+            "gameDayNo": tick.game_day_no,
+            "minuteOfDay": tick.minute_of_day,
+            "phase": tick.phase,
+            "matchingMode": tick.matching_mode,
+            "isTradable": tick.is_tradable,
+            "isMatchingPoint": tick.is_matching_point,
+        }
+
+    def advance_tick(self, season_id: int) -> dict:
         key = str(season_id)
         last_tick_id = int(self._checkpoints.get(key, 0))
 
         ticks = self.tick_loader(season_id, last_tick_id)
         ticks = sorted(ticks, key=lambda item: (item.game_day_no, item.minute_of_day, item.id))
 
-        processed_ticks = 0
+        if not ticks:
+            return {
+                "season_id": season_id,
+                "advanced": False,
+                "processed_ticks": 0,
+                "matching_ticks": 0,
+                "last_tick_id": last_tick_id,
+                "tick": None,
+                "next_tick": None,
+            }
+
+        tick = ticks[0]
+        next_tick = ticks[1] if len(ticks) > 1 else None
         matching_ticks = 0
 
-        for tick in ticks:
-            processed_ticks += 1
+        if self.event_bus is not None:
+            self.event_bus.emit_clock_tick(
+                {
+                    "seasonId": tick.season_id,
+                    "gameDayNo": tick.game_day_no,
+                    "minuteOfDay": tick.minute_of_day,
+                    "phase": tick.phase,
+                    "matchingMode": tick.matching_mode,
+                    "tickId": tick.id,
+                }
+            )
+
+        if tick.is_matching_point:
+            quotes_by_code = self.quote_loader(season_id, tick)
+            result = self.trading_service.process_tick(tick=tick, quotes_by_code=quotes_by_code)
+            matching_ticks += 1
 
             if self.event_bus is not None:
-                self.event_bus.emit_clock_tick(
-                    {
-                        "seasonId": tick.season_id,
-                        "gameDayNo": tick.game_day_no,
-                        "minuteOfDay": tick.minute_of_day,
-                        "phase": tick.phase,
-                        "matchingMode": tick.matching_mode,
-                        "tickId": tick.id,
-                    }
-                )
+                trade_ids = result.get("tradeIds", [])
+                for trade_id in trade_ids:
+                    self.event_bus.emit_trade_matched({"tradeId": trade_id, "tickId": tick.id})
 
-            if tick.is_matching_point:
-                quotes_by_code = self.quote_loader(season_id, tick)
-                result = self.trading_service.process_tick(tick=tick, quotes_by_code=quotes_by_code)
-                matching_ticks += 1
-
-                if self.event_bus is not None:
-                    trade_ids = result.get("tradeIds", [])
-                    for trade_id in trade_ids:
-                        self.event_bus.emit_trade_matched({"tradeId": trade_id, "tickId": tick.id})
-
-            last_tick_id = max(last_tick_id, tick.id)
-
+        last_tick_id = max(last_tick_id, tick.id)
         self._checkpoints[key] = last_tick_id
         self._save_checkpoints()
+
+        return {
+            "season_id": season_id,
+            "advanced": True,
+            "processed_ticks": 1,
+            "matching_ticks": matching_ticks,
+            "last_tick_id": last_tick_id,
+            "tick": self._tick_to_dict(tick),
+            "next_tick": self._tick_to_dict(next_tick) if next_tick is not None else None,
+        }
+
+    def run_once(self, season_id: int) -> dict:
+        processed_ticks = 0
+        matching_ticks = 0
+        result = self.advance_tick(season_id)
+        while result["advanced"]:
+            processed_ticks += int(result["processed_ticks"])
+            matching_ticks += int(result["matching_ticks"])
+            result = self.advance_tick(season_id)
+
+        last_tick_id = self.get_checkpoint(season_id)
 
         return {
             "season_id": season_id,

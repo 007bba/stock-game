@@ -16,6 +16,7 @@ React 18 + TypeScript + Vite + Ant Design frontend for the stock-game project.
 
    VITE_SUPABASE_URL
    VITE_SUPABASE_ANON_KEY
+   VITE_DEFAULT_SEASON_ID
 
 4. Start development server:
 
@@ -27,6 +28,7 @@ React 18 + TypeScript + Vite + Ant Design frontend for the stock-game project.
 - Session token is managed by Supabase and read from browser storage.
 - API requests auto-attach Bearer token when a session exists.
 - Do not put any secret key in frontend env files.
+- `VITE_DEFAULT_SEASON_ID` controls which replay season the demo training presets bind to.
 
 ## Commands
 
